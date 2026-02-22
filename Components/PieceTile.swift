@@ -24,6 +24,6 @@ struct PieceTile: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .scaleEffect(pressed ? 0.94 : 1.0)
-        .animation(.easeInOut(duration: 0.12), value: pressed)
+        .animation(GameState.MotionContract.tilePressEase, value: pressed)
     }
 }

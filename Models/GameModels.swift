@@ -1,16 +1,429 @@
 import SwiftUI
 
-enum Phase: Hashable {
-    case pictograph
-    case ideograph
-    case compound
-    case phonoSemantic
+enum AppFlowState: Hashable {
+    case intro
+    case playing
+    case ending
 }
 
-struct ComponentPiece: Identifiable, Hashable {
+enum LevelType: Hashable {
+    case tracing
+    case quiz
+    case combination
+    case free
+}
+
+enum ScriptDisplayMode: Hashable {
+    case oraclePreferred
+    case modern
+}
+
+enum SpatialRule: Hashable {
+    case leftRight
+    case topBottom
+    case stacked
+    case any
+}
+
+enum CanvasItemStatus: Hashable {
+    case idle
+    case merging
+    case repelling
+    case returning
+    case destroying
+}
+
+enum CombinationErrorKind: Hashable {
+    case directionMismatch
+    case invalidCombination
+}
+
+struct LevelOption: Identifiable, Hashable {
     let id: String
-    let glyph: String
-    let accessibilityName: String
+    let icon: String
+    let label: String
+    let isCorrect: Bool
+    let oracleIcon: String?
+    let oracleLabel: String?
+
+    init(
+        id: String,
+        icon: String,
+        label: String,
+        isCorrect: Bool,
+        oracleIcon: String? = nil,
+        oracleLabel: String? = nil
+    ) {
+        self.id = id
+        self.icon = icon
+        self.label = label
+        self.isCorrect = isCorrect
+        self.oracleIcon = oracleIcon
+        self.oracleLabel = oracleLabel
+    }
+
+    func displayIcon(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleIcon {
+            return oracleIcon
+        }
+        return icon
+    }
+
+    func displayLabel(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleLabel {
+            return oracleLabel
+        }
+        return label
+    }
+}
+
+struct InventoryToken: Identifiable, Hashable {
+    let id: String
+    let icon: String
+    let label: String
+    let oracleIcon: String?
+    let oracleLabel: String?
+
+    init(
+        id: String,
+        icon: String,
+        label: String,
+        oracleIcon: String? = nil,
+        oracleLabel: String? = nil
+    ) {
+        self.id = id
+        self.icon = icon
+        self.label = label
+        self.oracleIcon = oracleIcon
+        self.oracleLabel = oracleLabel
+    }
+
+    func displayIcon(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleIcon {
+            return oracleIcon
+        }
+        return icon
+    }
+
+    func displayLabel(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleLabel {
+            return oracleLabel
+        }
+        return label
+    }
+}
+
+struct CanvasItem: Identifiable, Hashable {
+    let uniqueID: String
+    var item: InventoryToken
+    var position: CGPoint
+    var status: CanvasItemStatus = .idle
+
+    var id: String { uniqueID }
+}
+
+struct EvolutionIngredient: Identifiable, Hashable {
+    let id: String
+    let icon: String
+}
+
+struct CombinationRecipe: Identifiable, Hashable {
+    var id: String { resultPieceID }
+    let ingredients: [String]
+    let resultPieceID: String
+    let resultGlyph: String
+    let resultMeaning: String
+    let explanation: String
+    let spatial: SpatialRule
+    let oracleResultMeaning: String?
+
+    init(
+        ingredients: [String],
+        resultID: String,
+        resultGlyph: String,
+        resultMeaning: String,
+        explanation: String,
+        spatial: SpatialRule,
+        oracleResultMeaning: String? = nil
+    ) {
+        self.ingredients = ingredients
+        self.resultPieceID = resultID
+        self.resultGlyph = resultGlyph
+        self.resultMeaning = resultMeaning
+        self.explanation = explanation
+        self.spatial = spatial
+        self.oracleResultMeaning = oracleResultMeaning
+    }
+
+    func displayResultMeaning(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred {
+            return oracleResultMeaning ?? resultGlyph
+        }
+        return resultMeaning
+    }
+}
+
+struct DistractorRule: Hashable {
+    let ingredients: [String]
+    let message: String
+}
+
+struct TracingLevelData: Hashable {
+    let character: String
+    let meaning: String
+    let guide: TraceGuide
+    let explanation: String
+    let illustrationSymbol: String
+    let imageAssetName: String
+    let oracleCharacter: String?
+    let oracleMeaning: String?
+    let oracleExplanation: String?
+    let oracleImageAssetName: String?
+
+    init(
+        character: String,
+        meaning: String,
+        guide: TraceGuide,
+        explanation: String,
+        illustrationSymbol: String,
+        imageAssetName: String,
+        oracleCharacter: String? = nil,
+        oracleMeaning: String? = nil,
+        oracleExplanation: String? = nil,
+        oracleImageAssetName: String? = nil
+    ) {
+        self.character = character
+        self.meaning = meaning
+        self.guide = guide
+        self.explanation = explanation
+        self.illustrationSymbol = illustrationSymbol
+        self.imageAssetName = imageAssetName
+        self.oracleCharacter = oracleCharacter
+        self.oracleMeaning = oracleMeaning
+        self.oracleExplanation = oracleExplanation
+        self.oracleImageAssetName = oracleImageAssetName
+    }
+
+    func displayCharacter(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleCharacter {
+            return oracleCharacter
+        }
+        return character
+    }
+
+    func displayMeaning(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleMeaning {
+            return oracleMeaning
+        }
+        return meaning
+    }
+
+    func displayExplanation(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleExplanation {
+            return oracleExplanation
+        }
+        return explanation
+    }
+
+    func displayImageAsset(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleImageAssetName {
+            return oracleImageAssetName
+        }
+        return imageAssetName
+    }
+}
+
+struct QuizLevelData: Hashable {
+    let question: String
+    let options: [LevelOption]
+    let explanation: String
+    let oracleQuestion: String?
+    let oracleExplanation: String?
+
+    init(
+        question: String,
+        options: [LevelOption],
+        explanation: String,
+        oracleQuestion: String? = nil,
+        oracleExplanation: String? = nil
+    ) {
+        self.question = question
+        self.options = options
+        self.explanation = explanation
+        self.oracleQuestion = oracleQuestion
+        self.oracleExplanation = oracleExplanation
+    }
+
+    func displayQuestion(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleQuestion {
+            return oracleQuestion
+        }
+        return question
+    }
+
+    func displayExplanation(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleExplanation {
+            return oracleExplanation
+        }
+        return explanation
+    }
+}
+
+struct CombinationLevelData: Hashable {
+    let instruction: String
+    let targetMeaning: String
+    let targetChar: String
+    let baseInventory: [InventoryToken]
+    let recipes: [CombinationRecipe]
+    let distractors: [DistractorRule]
+    let oracleInstruction: String?
+    let oracleTargetMeaning: String?
+
+    init(
+        instruction: String,
+        targetMeaning: String,
+        targetChar: String,
+        baseInventory: [InventoryToken],
+        recipes: [CombinationRecipe],
+        distractors: [DistractorRule],
+        oracleInstruction: String? = nil,
+        oracleTargetMeaning: String? = nil
+    ) {
+        self.instruction = instruction
+        self.targetMeaning = targetMeaning
+        self.targetChar = targetChar
+        self.baseInventory = baseInventory
+        self.recipes = recipes
+        self.distractors = distractors
+        self.oracleInstruction = oracleInstruction
+        self.oracleTargetMeaning = oracleTargetMeaning
+    }
+
+    func displayInstruction(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleInstruction {
+            return oracleInstruction
+        }
+        return instruction
+    }
+
+    func displayTargetMeaning(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleTargetMeaning {
+            return oracleTargetMeaning
+        }
+        return targetMeaning
+    }
+}
+
+struct FreeLevelData: Hashable {
+    let instruction: String
+    let targetCount: Int
+    let availableItems: [InventoryToken]
+    let validRecipes: [CombinationRecipe]
+    let finalMessage: String
+    let oracleInstruction: String?
+    let oracleFinalMessage: String?
+
+    init(
+        instruction: String,
+        targetCount: Int,
+        availableItems: [InventoryToken],
+        validRecipes: [CombinationRecipe],
+        finalMessage: String,
+        oracleInstruction: String? = nil,
+        oracleFinalMessage: String? = nil
+    ) {
+        self.instruction = instruction
+        self.targetCount = targetCount
+        self.availableItems = availableItems
+        self.validRecipes = validRecipes
+        self.finalMessage = finalMessage
+        self.oracleInstruction = oracleInstruction
+        self.oracleFinalMessage = oracleFinalMessage
+    }
+
+    func displayInstruction(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleInstruction {
+            return oracleInstruction
+        }
+        return instruction
+    }
+
+    func displayFinalMessage(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleFinalMessage {
+            return oracleFinalMessage
+        }
+        return finalMessage
+    }
+}
+
+struct WebLevel: Identifiable, Hashable {
+    let id: Int
+    let type: LevelType
+    let title: String
+    let oracleTitle: String?
+    let tracing: TracingLevelData?
+    let quiz: QuizLevelData?
+    let combination: CombinationLevelData?
+    let free: FreeLevelData?
+
+    static func tracing(id: Int, title: String, oracleTitle: String? = nil, data: TracingLevelData) -> WebLevel {
+        WebLevel(
+            id: id,
+            type: .tracing,
+            title: title,
+            oracleTitle: oracleTitle,
+            tracing: data,
+            quiz: nil,
+            combination: nil,
+            free: nil
+        )
+    }
+
+    static func quiz(id: Int, title: String, oracleTitle: String? = nil, data: QuizLevelData) -> WebLevel {
+        WebLevel(
+            id: id,
+            type: .quiz,
+            title: title,
+            oracleTitle: oracleTitle,
+            tracing: nil,
+            quiz: data,
+            combination: nil,
+            free: nil
+        )
+    }
+
+    static func combination(id: Int, title: String, oracleTitle: String? = nil, data: CombinationLevelData) -> WebLevel {
+        WebLevel(
+            id: id,
+            type: .combination,
+            title: title,
+            oracleTitle: oracleTitle,
+            tracing: nil,
+            quiz: nil,
+            combination: data,
+            free: nil
+        )
+    }
+
+    static func free(id: Int, title: String, oracleTitle: String? = nil, data: FreeLevelData) -> WebLevel {
+        WebLevel(
+            id: id,
+            type: .free,
+            title: title,
+            oracleTitle: oracleTitle,
+            tracing: nil,
+            quiz: nil,
+            combination: nil,
+            free: data
+        )
+    }
+
+    func displayTitle(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleTitle {
+            return oracleTitle
+        }
+        return title
+    }
 }
 
 struct TraceStroke: Hashable {
@@ -24,48 +437,6 @@ struct TraceGuide: Hashable {
     init(strokes: [TraceStroke], completionThreshold: CGFloat = 0.62) {
         self.strokes = strokes
         self.completionThreshold = completionThreshold
-    }
-}
-
-struct Level: Identifiable {
-    let id: Int
-    let phase: Phase
-    let prompt: String
-    let components: [ComponentPiece]
-    let solution: [String]
-    let targetSlots: [String: CGPoint]
-    let evolutionFrames: [String]
-    let reflection: String
-    let ancientForm: String?
-    let pictographImage: String?
-    let referenceImage: String?
-    let referenceSymbol: String?
-    let traceGuide: TraceGuide?
-
-    init(
-        id: Int, phase: Phase, prompt: String,
-        components: [ComponentPiece], solution: [String],
-        targetSlots: [String: CGPoint] = [:],
-        evolutionFrames: [String], reflection: String,
-        ancientForm: String? = nil,
-        pictographImage: String? = nil,
-        referenceImage: String? = nil,
-        referenceSymbol: String? = nil,
-        traceGuide: TraceGuide? = nil
-    ) {
-        self.id = id
-        self.phase = phase
-        self.prompt = prompt
-        self.components = components
-        self.solution = solution
-        self.targetSlots = targetSlots
-        self.evolutionFrames = evolutionFrames
-        self.reflection = reflection
-        self.ancientForm = ancientForm
-        self.pictographImage = pictographImage
-        self.referenceImage = referenceImage
-        self.referenceSymbol = referenceSymbol
-        self.traceGuide = traceGuide
     }
 }
 
@@ -96,16 +467,6 @@ extension TraceGuide {
             stroke([(0.34, 0.30), (0.68, 0.30), (0.68, 0.72)]),
             stroke([(0.34, 0.72), (0.68, 0.72)]),
         ])
-    }
-
-    static func hand() -> TraceGuide {
-        TraceGuide(strokes: [
-            stroke([(0.32, 0.38), (0.72, 0.38)]),
-            stroke([(0.38, 0.50), (0.68, 0.50)]),
-            stroke([(0.50, 0.20), (0.50, 0.80)]),
-            stroke([(0.50, 0.62), (0.38, 0.80)]),
-            stroke([(0.50, 0.62), (0.66, 0.78)]),
-        ], completionThreshold: 0.58)
     }
 
     static func sun() -> TraceGuide {

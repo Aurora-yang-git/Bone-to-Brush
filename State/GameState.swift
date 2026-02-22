@@ -3,191 +3,187 @@ import SwiftUI
 
 @Observable @MainActor
 final class GameState {
+    enum MotionContract {
+        static let standardSpring = Animation.spring(response: 0.34, dampingFraction: 0.76)
+        static let fastEase = Animation.easeInOut(duration: 0.20)
+        static let traceProgressEase = Animation.easeInOut(duration: 0.12)
+        static let microEase = Animation.easeInOut(duration: 0.16)
+        static let tilePressEase = Animation.easeInOut(duration: 0.12)
+        static let traceRevealEase = Animation.easeInOut(duration: 0.80)
+        static let resultRevealEase = Animation.easeInOut(duration: 0.20)
+        static let introTitleRevealEase = Animation.easeOut(duration: 0.75)
+        static let introHaloRevealEase = Animation.easeOut(duration: 0.80)
+        static let introButtonRevealEase = Animation.easeOut(duration: 0.70)
+        static let introFooterRevealEase = Animation.easeOut(duration: 0.55)
+        static let endingTitleRevealEase = Animation.easeOut(duration: 0.65)
+        static let endingGlyphRevealSpring = Animation.spring(response: 0.35, dampingFraction: 0.78)
+        static let endingButtonRevealEase = Animation.easeOut(duration: 0.55)
+        static let successSpring = Animation.spring(response: 0.42, dampingFraction: 0.78)
+        static let repelSpring = Animation.spring(response: 0.22, dampingFraction: 0.58)
+        static let returnSpring = Animation.spring(response: 0.30, dampingFraction: 0.72)
 
-    // MARK: Shared state
+        static let defaultAdvanceDelaySeconds: Double = 1.0
+        static let tracingAdvanceDelaySeconds: Double = 2.0
+        static let combinationAdvanceDelaySeconds: Double = 1.5
+        static let repelClearDelay: Duration = .milliseconds(650)
+        static let returnClearDelay: Duration = .milliseconds(540)
+        static let feedbackClearDelay: Duration = .milliseconds(420)
+        static let transientFeedbackClearDelay: Duration = .seconds(2.0)
+        static let secondaryResultHoldDelay: Duration = .seconds(1.0)
+        static let evolutionStageDuration: Duration = .milliseconds(1900)
 
+        static let quizRevealDelay: Duration = .milliseconds(500)
+        static let quizAutoAdvanceDelay: Duration = .milliseconds(2500)
+        static let quizWrongResetDelay: Duration = .seconds(1.0)
+
+        static let repelOffsetX: CGFloat = 18
+        static let returnOffsetY: CGFloat = 176
+        static let returningScale: CGFloat = 0.82
+    }
+
+    // MARK: App flow
+    var flowState: AppFlowState = .intro
     var currentLevelIndex = 0
-    var snappedPositions: [String: CGPoint] = [:]
-    var freePositions: [String: CGPoint] = [:] // New: Free-floating pieces
-    var isEvolving = false
-    var evolutionIndex: Int? = nil
-    var showReflection = false
-    var showContinue = false
-    var finishedAllLevels = false
-    var pictographMerging = false
+    var showLevelMenu = false
+    var audioEnabled = false
+    var scriptDisplayMode: ScriptDisplayMode = .modern
 
-    // Phase transition overlay
-    var showPhaseTransition = false
-    var phaseTransitionText = ""
-
-    // Hint text (auto-fades)
-    var hintVisible = false
-
-    // Visual Hint State
-    var draggingPieceID: String? = nil // Track what is being dragged to show hints
-
-    // Trace mode (Level 1-9)
+    // MARK: Tracing state
     var traceProgress: CGFloat = 0
     var traceCompleted = false
+    var traceStartedAt: Date? = nil
 
-    // MARK: Constants
+    // MARK: Quiz state
+    var quizSelectedOptionID: String? = nil
+    var quizAnswered = false
+    var quizWasCorrect = false
+    var quizFeedback = ""
+    var quizShowExplanation = false
 
-    static let phaseTransitions: [Phase: String] = [
-        .pictograph: "You have learned to see.\nNow learn to mark.",
-        .ideograph: "You have learned to mark.\nNow learn to create.",
-        .compound: "You have learned to create.\nNow learn how systems grow.",
-    ]
+    // MARK: Combination state
+    var combinationInventory: [InventoryToken] = []
+    var combinationWorkbench: [String] = []
+    var combinationFeedback = ""
+    var combinationResultGlyph = ""
+    var combinationSolvedTarget = false
 
-    static let levelHints: [Int: String] = [
-        1: "Trace the character on the stage",
-        10: "Drag the pieces to the stage",
-    ]
+    // MARK: Free mode state
+    var freeInventory: [InventoryToken] = []
+    var freeWorkbench: [String] = []
+    var freeFeedback = ""
+    var freeDiscoveredGlyphs: [String] = []
+    var freeReachedGoal = false
+
+    // MARK: Shared constants
+    static let minimumTraceDuration: TimeInterval = 1.2
+    private var advanceTask: Task<Void, Never>? = nil
+    private var quizTask: Task<Void, Never>? = nil
 
     // MARK: Computed
+    let levels: [WebLevel]
+    var currentLevel: WebLevel? {
+        guard currentLevelIndex >= 0 && currentLevelIndex < levels.count else { return nil }
+        return levels[currentLevelIndex]
+    }
+    var isLastLevel: Bool { currentLevelIndex == levels.count - 1 }
 
-    var currentLevel: Level? {
-        guard currentLevelIndex < Level.all.count else { return nil }
-        return Level.all[currentLevelIndex]
+    init() {
+        self.levels = WebLevel.all
     }
 
-    var isTraceMode: Bool {
-        guard let level = currentLevel else { return false }
-        return level.id <= 9 && level.traceGuide != nil
+    // MARK: App actions
+    func startJourney() {
+        enterPlaying(at: 0)
     }
 
-    // MARK: Actions
-
-    func resetForCurrentLevel() {
-        snappedPositions = [:]
-        freePositions = [:]
-        isEvolving = false
-        evolutionIndex = nil
-        showReflection = false
-        showContinue = false
-        pictographMerging = false
-        draggingPieceID = nil
-        traceProgress = 0
-        traceCompleted = false
-
-        if let level = currentLevel, Self.levelHints[level.id] != nil {
-            hintVisible = true
-        } else {
-            hintVisible = false
-        }
-    }
-
-    func advanceLevel() {
-        guard !finishedAllLevels else { return }
-
-        let currentPhase = currentLevel?.phase
-        let nextIndex = currentLevelIndex + 1
-
-        if nextIndex < Level.all.count {
-            let nextPhase = Level.all[nextIndex].phase
-            if currentPhase != nextPhase,
-               let cp = currentPhase,
-               let text = Self.phaseTransitions[cp]
-            {
-                phaseTransitionText = text
-                showPhaseTransition = true
-                currentLevelIndex = nextIndex
-            } else {
-                currentLevelIndex = nextIndex
-                resetForCurrentLevel()
-            }
-        } else {
-            finishedAllLevels = true
-            showContinue = false
-        }
-    }
-
-    func dismissPhaseTransition() {
-        showPhaseTransition = false
+    func restartJourney() {
+        advanceTask?.cancel()
+        quizTask?.cancel()
+        flowState = .intro
+        showLevelMenu = false
+        currentLevelIndex = 0
         resetForCurrentLevel()
     }
 
-    func canUsePiece(_ pieceID: String) -> Bool {
-        snappedPositions[pieceID] == nil
-            && freePositions[pieceID] == nil
-            && !isEvolving
-            && !finishedAllLevels
+    func jumpToLevel(_ index: Int) {
+        guard levels.indices.contains(index) else { return }
+        enterPlaying(at: index)
     }
 
-    // Phase 2, 3, 4: drag to place
-    func placePiece(_ pieceID: String, near location: CGPoint, stageSize: CGSize) -> Bool {
-        guard let level = currentLevel else { return false }
-
-        // If it's already snapped, don't move it.
-        if snappedPositions[pieceID] != nil { return false }
-
-        // Check if it hits a target slot.
-        if let norm = level.targetSlots[pieceID] {
-            let target = CGPoint(x: norm.x * stageSize.width, y: norm.y * stageSize.height)
-            let threshold = min(stageSize.width, stageSize.height) * 0.15
-
-            if hypot(location.x - target.x, location.y - target.y) <= threshold {
-                withAnimation(.easeOut(duration: 0.18)) {
-                    snappedPositions[pieceID] = target
-                    freePositions[pieceID] = nil
-                }
-                showPlacementFocus(for: pieceID)
-
-                if level.solution.allSatisfy({ snappedPositions[$0] != nil }) {
-                    startEvolution()
-                }
-                return true
-            }
-        }
-
-        // If not snapped, place it freely on stage.
-        let clampedLocation = clampedFreePosition(location, stageSize: stageSize)
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-            freePositions[pieceID] = clampedLocation
-        }
-        showPlacementFocus(for: pieceID)
-        return true
-    }
-
-    func updateHover(pieceID: String, location: CGPoint, stageSize: CGSize) {
-        guard let level = currentLevel, let norm = level.targetSlots[pieceID] else {
-            draggingPieceID = nil
+    func advanceLevel() {
+        let next = currentLevelIndex + 1
+        guard levels.indices.contains(next) else {
+            flowState = .ending
+            showLevelMenu = false
             return
         }
+        currentLevelIndex = next
+        resetForCurrentLevel()
+    }
 
-        let target = CGPoint(x: norm.x * stageSize.width, y: norm.y * stageSize.height)
-        let threshold = min(stageSize.width, stageSize.height) * 0.25
-
-        if hypot(location.x - target.x, location.y - target.y) <= threshold {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                draggingPieceID = pieceID
-            }
-        } else {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                draggingPieceID = nil
-            }
+    func scheduleAdvance(delaySeconds: Double = MotionContract.defaultAdvanceDelaySeconds) {
+        advanceTask?.cancel()
+        let expectedLevel = currentLevel?.id
+        advanceTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delaySeconds))
+            guard let self else { return }
+            guard self.currentLevel?.id == expectedLevel else { return }
+            self.advanceLevel()
         }
     }
 
-    func clearHover() {
-        withAnimation { draggingPieceID = nil }
-    }
-
-    func clearTrace() {
-        guard isTraceMode else { return }
+    func resetForCurrentLevel() {
+        advanceTask?.cancel()
+        quizTask?.cancel()
         traceProgress = 0
         traceCompleted = false
+        traceStartedAt = nil
+
+        quizSelectedOptionID = nil
+        quizAnswered = false
+        quizWasCorrect = false
+        quizFeedback = ""
+        quizShowExplanation = false
+
+        combinationInventory = []
+        combinationWorkbench = []
+        combinationFeedback = ""
+        combinationResultGlyph = ""
+        combinationSolvedTarget = false
+
+        freeInventory = []
+        freeWorkbench = []
+        freeFeedback = ""
+        freeDiscoveredGlyphs = []
+        freeReachedGoal = false
+
+        guard let level = currentLevel else { return }
+        if let combination = level.combination {
+            combinationInventory = combination.baseInventory
+        }
+        if let free = level.free {
+            freeInventory = free.availableItems
+        }
     }
 
-    func updateTrace(points: [CGPoint], didEnd: Bool) {
-        guard isTraceMode,
-              !isEvolving,
-              !finishedAllLevels,
-              let guide = currentLevel?.traceGuide
-        else { return }
+    // MARK: Tracing
+    func clearTrace() {
+        advanceTask?.cancel()
+        traceProgress = 0
+        traceCompleted = false
+        traceStartedAt = nil
+    }
+
+    func updateTrace(points: [CGPoint], didEnd: Bool, guide: TraceGuide) {
+        guard !traceCompleted else { return }
+
+        if traceStartedAt == nil, !points.isEmpty {
+            traceStartedAt = Date()
+        }
 
         let coverage = traceCoverage(points: points, guide: guide)
         if coverage > traceProgress {
-            withAnimation(.easeInOut(duration: 0.12)) {
+            withAnimation(MotionContract.traceProgressEase) {
                 traceProgress = coverage
             }
         } else if didEnd {
@@ -195,10 +191,16 @@ final class GameState {
             traceProgress = max(traceProgress, coverage)
         }
 
-        guard !traceCompleted, traceProgress >= guide.completionThreshold else { return }
+        guard didEnd else { return }
+        guard let startedAt = traceStartedAt else { return }
+        guard Date().timeIntervalSince(startedAt) >= Self.minimumTraceDuration else { return }
+        traceProgress = max(traceProgress, min(guide.completionThreshold, 1))
+    }
+
+    func confirmTrace() {
+        guard traceProgress > 0.01 else { return }
         traceCompleted = true
-        hintVisible = false
-        startEvolution()
+        scheduleAdvance(delaySeconds: MotionContract.tracingAdvanceDelaySeconds)
     }
 
     private func traceCoverage(points: [CGPoint], guide: TraceGuide) -> CGFloat {
@@ -215,63 +217,160 @@ final class GameState {
         return min(CGFloat(coveredCount) / CGFloat(guidePoints.count), 1)
     }
 
-    private func clampedFreePosition(_ location: CGPoint, stageSize: CGSize) -> CGPoint {
-        // Keep center inside the stage so the dropped tile never disappears out of bounds.
-        let halfTile: CGFloat = 33
-        let margin: CGFloat = 8
-        let minX = halfTile + margin
-        let maxX = stageSize.width - halfTile - margin
-        let minY = halfTile + margin
-        let maxY = stageSize.height - halfTile - margin
-        return CGPoint(
-            x: min(max(location.x, minX), maxX),
-            y: min(max(location.y, minY), maxY)
-        )
-    }
+    // MARK: Quiz
+    func chooseQuizOption(_ id: String) {
+        guard let quiz = currentLevel?.quiz else { return }
+        guard !quizAnswered else { return }
+        guard let option = quiz.options.first(where: { $0.id == id }) else { return }
+        quizTask?.cancel()
+        quizSelectedOptionID = id
+        quizAnswered = true
+        quizWasCorrect = option.isCorrect
+        quizFeedback = ""
+        quizShowExplanation = false
 
-    private func showPlacementFocus(for pieceID: String) {
-        withAnimation(.easeInOut(duration: 0.12)) {
-            draggingPieceID = pieceID
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) { [weak self] in
-            guard let self else { return }
-            if self.draggingPieceID == pieceID {
-                withAnimation(.easeOut(duration: 0.18)) {
-                    self.draggingPieceID = nil
+        if option.isCorrect {
+            let expectedLevelID = currentLevel?.id
+            quizTask = Task { [weak self] in
+                try? await Task.sleep(for: MotionContract.quizRevealDelay)
+                guard let self else { return }
+                guard self.currentLevel?.id == expectedLevelID else { return }
+                withAnimation(MotionContract.fastEase) {
+                    self.quizShowExplanation = true
+                    self.quizFeedback = quiz.displayExplanation(mode: self.scriptDisplayMode)
                 }
+                try? await Task.sleep(for: MotionContract.quizAutoAdvanceDelay)
+                guard self.currentLevel?.id == expectedLevelID else { return }
+                self.advanceLevel()
+            }
+        } else {
+            let levelID = currentLevel?.id
+            quizTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(for: MotionContract.quizWrongResetDelay)
+                guard self.currentLevel?.id == levelID else { return }
+                self.quizSelectedOptionID = nil
+                self.quizAnswered = false
+                self.quizWasCorrect = false
+                self.quizFeedback = ""
+                self.quizShowExplanation = false
             }
         }
     }
 
-    // MARK: Evolution sequence
+    // MARK: Combination
+    func dropCombinationToken(_ id: String) {
+        guard combinationWorkbench.count < 3 else { return }
+        combinationWorkbench.append(id)
+    }
 
-    private func startEvolution() {
-        guard let level = currentLevel, !isEvolving else { return }
-        isEvolving = true
-        hintVisible = false
+    func undoCombinationToken() {
+        _ = combinationWorkbench.popLast()
+    }
 
-        Task {
-            if level.phase == .pictograph {
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    pictographMerging = true
-                }
-                try? await Task.sleep(for: .milliseconds(500))
-            } else {
-                try? await Task.sleep(for: .milliseconds(420))
-            }
+    func clearCombinationWorkbench() {
+        combinationWorkbench = []
+    }
 
-            for index in 0..<level.evolutionFrames.count {
-                withAnimation(.easeInOut(duration: 0.28)) { self.evolutionIndex = index }
-                if index < level.evolutionFrames.count - 1 {
-                    try? await Task.sleep(for: .milliseconds(380))
-                }
-            }
-
-            try? await Task.sleep(for: .milliseconds(220))
-            withAnimation(.easeInOut(duration: 0.28)) { self.showReflection = true }
-            try? await Task.sleep(for: .milliseconds(140))
-            withAnimation(.easeInOut(duration: 0.22)) { self.showContinue = true }
-            self.isEvolving = false
+    func combineWorkbench() {
+        guard let level = currentLevel, let combination = level.combination else { return }
+        guard combinationWorkbench.count >= 2 else {
+            combinationFeedback = "Drop at least two pieces before combining."
+            return
         }
+
+        let key = ingredientKey(combinationWorkbench)
+        if let distractor = combination.distractors.first(where: { ingredientKey($0.ingredients) == key }) {
+            combinationFeedback = distractor.message
+            combinationWorkbench = []
+            return
+        }
+
+        guard let recipe = combination.recipes.first(where: { ingredientKey($0.ingredients) == key }) else {
+            combinationFeedback = "Those pieces do not form a known character."
+            combinationWorkbench = []
+            return
+        }
+
+        combinationResultGlyph = recipe.resultGlyph
+        combinationFeedback = "\(recipe.resultGlyph) · \(recipe.resultMeaning). \(recipe.explanation)"
+        if !combinationInventory.contains(where: { $0.id == recipe.resultPieceID }) {
+            combinationInventory.append(
+                InventoryToken(
+                    id: recipe.resultPieceID,
+                    icon: recipe.resultGlyph,
+                    label: recipe.resultMeaning
+                )
+            )
+        }
+        combinationWorkbench = []
+
+        if recipe.resultGlyph == combination.targetChar {
+            combinationSolvedTarget = true
+            scheduleAdvance(delaySeconds: 1.1)
+        }
+    }
+
+    // MARK: Free mode
+    func dropFreeToken(_ id: String) {
+        guard freeWorkbench.count < 3 else { return }
+        freeWorkbench.append(id)
+    }
+
+    func undoFreeToken() {
+        _ = freeWorkbench.popLast()
+    }
+
+    func clearFreeWorkbench() {
+        freeWorkbench = []
+    }
+
+    func combineFreeWorkbench() {
+        guard let free = currentLevel?.free else { return }
+        guard freeWorkbench.count >= 2 else {
+            freeFeedback = "Pick at least two pieces."
+            return
+        }
+
+        let key = ingredientKey(freeWorkbench)
+        guard let recipe = free.validRecipes.first(where: { ingredientKey($0.ingredients) == key }) else {
+            freeFeedback = "No character formed. Try another combination."
+            freeWorkbench = []
+            return
+        }
+
+        freeFeedback = "\(recipe.resultGlyph) · \(recipe.resultMeaning). \(recipe.explanation)"
+        if !freeInventory.contains(where: { $0.id == recipe.resultPieceID }) {
+            freeInventory.append(
+                InventoryToken(
+                    id: recipe.resultPieceID,
+                    icon: recipe.resultGlyph,
+                    label: recipe.resultMeaning
+                )
+            )
+        }
+        if !freeDiscoveredGlyphs.contains(recipe.resultGlyph) {
+            freeDiscoveredGlyphs.append(recipe.resultGlyph)
+        }
+        freeWorkbench = []
+
+        if freeDiscoveredGlyphs.count >= free.targetCount {
+            freeReachedGoal = true
+            freeFeedback = free.finalMessage
+        }
+    }
+
+    private func ingredientKey(_ ids: [String]) -> String {
+        ids.sorted().joined(separator: "|")
+    }
+
+    private func enterPlaying(at index: Int) {
+        guard levels.indices.contains(index) else { return }
+        advanceTask?.cancel()
+        quizTask?.cancel()
+        showLevelMenu = false
+        currentLevelIndex = index
+        flowState = .playing
+        resetForCurrentLevel()
     }
 }

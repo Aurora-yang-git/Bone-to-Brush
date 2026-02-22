@@ -8,14 +8,15 @@ import PackageDescription
 import AppleProductTypes
 
 let package = Package(
-    name: "我的 App",
+    name: "Bone to Brush",
     platforms: [
         .iOS("18.1")
     ],
     products: [
         .iOSApplication(
-            name: "我的 App",
+            name: "Bone to Brush",
             targets: ["AppModule"],
+            bundleIdentifier: "com.aurora.bonetobrush.app2",
             displayVersion: "1.0",
             bundleVersion: "1",
             appIcon: .placeholder(icon: .tv),
