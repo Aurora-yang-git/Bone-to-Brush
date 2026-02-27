@@ -42,42 +42,15 @@ final class GameState {
     }
 
     // MARK: App flow
-    var flowState: AppFlowState = .intro {
-        didSet {
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H6",
-                location: "GameState.swift:46",
-                message: "flowState changed",
-                data: [
-                    "oldValue": "\(oldValue)",
-                    "newValue": "\(flowState)",
-                    "currentLevelIndex": currentLevelIndex,
-                ]
-            )
-            // #endregion
-        }
-    }
-    var currentLevelIndex = 0 {
-        didSet {
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H6",
-                location: "GameState.swift:57",
-                message: "currentLevelIndex changed",
-                data: [
-                    "oldValue": oldValue,
-                    "newValue": currentLevelIndex,
-                    "flowState": "\(flowState)",
-                ]
-            )
-            // #endregion
-        }
-    }
+    var flowState: AppFlowState = .intro
+    var currentLevelIndex = 0
     var showLevelMenu = false
     var audioEnabled = false
     var scriptDisplayMode: ScriptDisplayMode = .modern
     var a11yPreviewVoiceOverEnabled = false
+
+    // MARK: VoiceGuide
+    let voiceGuide = VoiceGuidePlayer()
 
     // MARK: Tracing state
     var traceProgress: CGFloat = 0
@@ -120,50 +93,14 @@ final class GameState {
 
     init() {
         self.levels = WebLevel.all
-        // #region agent log
-        AgentRuntimeDebugLogger.log(
-            hypothesisID: "H6",
-            location: "GameState.swift:116",
-            message: "GameState initialized",
-            data: [
-                "levelsCount": levels.count,
-                "initialFlowState": "\(flowState)",
-                "initialLevelIndex": currentLevelIndex,
-                "gameStateID": ObjectIdentifier(self).hashValue,
-            ]
-        )
-        // #endregion
     }
 
     // MARK: App actions
     func startJourney() {
-        // #region agent log
-        AgentRuntimeDebugLogger.log(
-            hypothesisID: "H1",
-            location: "GameState.swift:95",
-            message: "startJourney invoked",
-            data: [
-                "flowStateBefore": "\(flowState)",
-                "currentLevelIndexBefore": currentLevelIndex,
-                "levelsCount": levels.count,
-            ]
-        )
-        // #endregion
         enterPlaying(at: 0)
     }
 
     func restartJourney() {
-        // #region agent log
-        AgentRuntimeDebugLogger.log(
-            hypothesisID: "H6",
-            location: "GameState.swift:124",
-            message: "restartJourney invoked",
-            data: [
-                "flowStateBefore": "\(flowState)",
-                "currentLevelIndexBefore": currentLevelIndex,
-            ]
-        )
-        // #endregion
         advanceTask?.cancel()
         quizTask?.cancel()
         flowState = .intro
@@ -428,37 +365,11 @@ final class GameState {
 
     private func enterPlaying(at index: Int) {
         guard levels.indices.contains(index) else { return }
-        // #region agent log
-        AgentRuntimeDebugLogger.log(
-            hypothesisID: "H1",
-            location: "GameState.swift:363",
-            message: "enterPlaying accepted index",
-            data: [
-                "targetIndex": index,
-                "flowStateBefore": "\(flowState)",
-                "showLevelMenuBefore": showLevelMenu,
-            ]
-        )
-        // #endregion
         advanceTask?.cancel()
         quizTask?.cancel()
         showLevelMenu = false
         currentLevelIndex = index
         flowState = .playing
         resetForCurrentLevel()
-        // #region agent log
-        AgentRuntimeDebugLogger.log(
-            hypothesisID: "H3",
-            location: "GameState.swift:371",
-            message: "enterPlaying completed",
-            data: [
-                "flowStateAfter": "\(flowState)",
-                "currentLevelIndexAfter": currentLevelIndex,
-                "currentLevelExists": currentLevel != nil,
-                "currentLevelType": "\(String(describing: currentLevel?.type))",
-                "currentLevelID": currentLevel?.id ?? -1,
-            ]
-        )
-        // #endregion
     }
 }

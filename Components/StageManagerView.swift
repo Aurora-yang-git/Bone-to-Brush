@@ -2,15 +2,19 @@ import Observation
 import SwiftUI
 
 struct StageManagerView: View {
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Bindable var gameState: GameState
     @State private var audioFeedbackToken = 0
+
+    // Convenience shorthand
+    private var guide: VoiceGuidePlayer { gameState.voiceGuide }
 
     var body: some View {
         Group {
             if let level = gameState.currentLevel {
                 switch level.type {
+                case .learn:
+                    LearnCharacterView(gameState: gameState, level: level)
                 case .observe:
                     ObserveView(gameState: gameState, level: level)
                 case .tracing:
@@ -38,18 +42,6 @@ struct StageManagerView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
-                    // #region agent log
-                    AgentRuntimeDebugLogger.log(
-                        hypothesisID: "H9",
-                        location: "StageManagerView.swift:39",
-                        message: "Chapter menu button tapped",
-                        data: [
-                            "flowState": "\(gameState.flowState)",
-                            "currentLevelIndex": gameState.currentLevelIndex,
-                            "showLevelMenuBefore": gameState.showLevelMenu,
-                        ]
-                    )
-                    // #endregion
                     gameState.showLevelMenu = true
                 } label: {
                     Label("Chapter Menu", systemImage: "square.grid.2x2")
@@ -71,98 +63,52 @@ struct StageManagerView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            HStack(spacing: 12) {
-                voiceOverPreviewToggle
-                Spacer()
-                audioControl
+            VStack(spacing: 8) {
+                // ── VoiceGuide control bar (only visible when enabled & system VO is off) ──
+                if guide.isEnabled && !voiceOverEnabled {
+                    VoiceGuideControlsBar(player: guide)
+                        .padding(.horizontal, 14)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                // ── Bottom icon strip ─────────────────────────────────────────────────────
+                HStack(spacing: 12) {
+                    voiceGuideToggle
+                    voiceOverPreviewToggle
+                    Spacer()
+                    audioControl
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 12)
+            .padding(.bottom, 2)
         }
         .fullScreenCover(isPresented: $gameState.showLevelMenu) {
             StageMenuFullScreen(gameState: gameState)
         }
         .sensoryFeedback(.selection, trigger: audioFeedbackToken)
-        .task(id: gameState.currentLevelIndex) {
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H3",
-                location: "StageManagerView.swift:72",
-                message: "StageManager level task fired",
-                data: [
-                    "flowState": "\(gameState.flowState)",
-                    "currentLevelIndex": gameState.currentLevelIndex,
-                    "currentLevelExists": gameState.currentLevel != nil,
-                    "currentLevelType": "\(String(describing: gameState.currentLevel?.type))",
-                    "hasObserveData": gameState.currentLevel?.observe != nil,
-                    "showLevelMenu": gameState.showLevelMenu,
-                ]
-            )
-            // #endregion
+        // Keep systemVoiceOverActive in sync so VoiceGuidePlayer skips AVSpeech when VO is on.
+        .onChange(of: voiceOverEnabled, initial: true) { _, newValue in
+            guide.systemVoiceOverActive = newValue
+            if newValue {
+                guide.isEnabled = true
+            }
         }
-        .onChange(of: gameState.showLevelMenu) { _, newValue in
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H5",
-                location: "StageManagerView.swift:88",
-                message: "showLevelMenu changed",
-                data: [
-                    "showLevelMenu": newValue,
-                    "flowState": "\(gameState.flowState)",
-                    "currentLevelIndex": gameState.currentLevelIndex,
-                ]
-            )
-            // #endregion
-        }
-        .onAppear {
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H10",
-                location: "StageManagerView.swift:97",
-                message: "StageManager onAppear",
-                data: [
-                    "flowState": "\(gameState.flowState)",
-                    "currentLevelIndex": gameState.currentLevelIndex,
-                    "showLevelMenu": gameState.showLevelMenu,
-                ]
-            )
-            // #endregion
-        }
-        .onDisappear {
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H10",
-                location: "StageManagerView.swift:110",
-                message: "StageManager onDisappear",
-                data: [
-                    "flowState": "\(gameState.flowState)",
-                    "currentLevelIndex": gameState.currentLevelIndex,
-                    "showLevelMenu": gameState.showLevelMenu,
-                ]
-            )
-            // #endregion
-        }
-        .task(id: "\(gameState.currentLevelIndex)-\(gameState.flowState)") {
-            for tick in 1...8 {
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled else { return }
-                // #region agent log
-                AgentRuntimeDebugLogger.log(
-                    hypothesisID: "H16",
-                    location: "StageManagerView.swift:130",
-                    message: "StageManager heartbeat",
-                    data: [
-                        "tick": tick,
-                        "scenePhase": "\(scenePhase)",
-                        "flowState": "\(gameState.flowState)",
-                        "currentLevelIndex": gameState.currentLevelIndex,
-                        "showLevelMenu": gameState.showLevelMenu,
-                    ]
-                )
-                // #endregion
+        // Auto-reload script when the chapter changes.
+        .onChange(of: gameState.currentLevelIndex, initial: true) { _, _ in
+            if guide.isEnabled && !voiceOverEnabled {
+                reloadAndPlay()
             }
         }
     }
+
+    // MARK: - Script loading helper
+
+    private func reloadAndPlay() {
+        let script = VoiceGuideScriptBuilder.build(from: gameState)
+        guide.load(items: script, playImmediately: guide.autoReadOnScreenChange)
+    }
+
+    // MARK: - Sub-views
 
     private var fallbackView: some View {
         VStack(spacing: 12) {
@@ -197,6 +143,40 @@ struct StageManagerView: View {
         .accessibilityHint("Toggle icon-only sound state")
     }
 
+    // MARK: - VoiceGuide toggle
+
+    private var voiceGuideToggle: some View {
+        Toggle(isOn: Binding(
+            get: { guide.isEnabled },
+            set: { newValue in
+                withAnimation(GameState.MotionContract.microEase) {
+                    guide.isEnabled = newValue
+                }
+                if newValue && !voiceOverEnabled {
+                    reloadAndPlay()
+                } else if !newValue {
+                    guide.stop()
+                }
+            }
+        )) {
+            Label("Voice Guide", systemImage: "ear")
+                .font(.footnote.weight(.semibold))
+                .labelStyle(.titleAndIcon)
+        }
+        .toggleStyle(.switch)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.thinMaterial, in: Capsule(style: .continuous))
+        .accessibilityLabel("Voice Guide")
+        .accessibilityHint(
+            guide.isEnabled
+                ? "In-app narration is on. Toggle to turn off."
+                : "Turn on in-app narration that reads each screen aloud."
+        )
+    }
+
+    // MARK: - VoiceOver preview binding / toggle
+
     private var voiceOverPreviewBinding: Binding<Bool> {
         Binding(
             get: { voiceOverEnabled || gameState.a11yPreviewVoiceOverEnabled },
@@ -225,6 +205,82 @@ struct StageManagerView: View {
                 ? "System VoiceOver is enabled."
                 : "Show VoiceOver-friendly controls without turning on system VoiceOver."
         )
+    }
+
+    private var readScreenButton: some View {
+        Button {
+            A11yNarrator.speak(a11yNarrationText)
+        } label: {
+            Image(systemName: "speaker.wave.2.fill")
+                .font(.title3.weight(.semibold))
+                .frame(width: 44, height: 44)
+                .accessibilityHidden(true)
+        }
+        .buttonStyle(.bordered)
+        .accessibilityLabel("Read screen")
+        .accessibilityHint("Speak the current screen summary")
+    }
+
+    private var a11yNarrationText: String {
+        guard let level = gameState.currentLevel else {
+            return "Loading chapter."
+        }
+        let title = level.displayTitle(mode: gameState.scriptDisplayMode)
+        let header = "Chapter \(level.id) of \(gameState.levels.count). \(title)."
+
+        switch level.type {
+        case .learn:
+            if let learn = level.learn {
+                return "\(header) \(learn.instruction) Character: \(learn.modernGlyph). Meaning: \(learn.meaning)."
+            }
+        case .observe:
+            if let observe = level.observe {
+                return "\(header) \(observe.instruction) \(observe.detail) World symbol: \(observe.worldSymbol). Oracle glyph: \(observe.oracleGlyph). Modern glyph: \(observe.modernGlyph)."
+            }
+        case .tracing:
+            if let tracing = level.tracing {
+                let meaning = tracing.displayMeaning(mode: gameState.scriptDisplayMode)
+                let character = tracing.displayCharacter(mode: gameState.scriptDisplayMode)
+                let explanation = tracing.displayExplanation(mode: gameState.scriptDisplayMode)
+                return "\(header) Trace \(character). Meaning: \(meaning). \(explanation)"
+            }
+        case .draw:
+            if let draw = level.draw {
+                let meaning = draw.displayMeaning(mode: gameState.scriptDisplayMode)
+                let character = draw.displayCharacter(mode: gameState.scriptDisplayMode)
+                let instruction = draw.displayInstruction(mode: gameState.scriptDisplayMode)
+                return "\(header) \(instruction) Draw \(character). Meaning: \(meaning)."
+            }
+        case .quiz:
+            if let quiz = level.quiz {
+                let question = quiz.displayQuestion(mode: gameState.scriptDisplayMode)
+                return "\(header) \(question)"
+            }
+        case .drag:
+            if let drag = level.drag {
+                let instruction = drag.displayInstruction(mode: gameState.scriptDisplayMode)
+                let targetMeaning = drag.displayTargetMeaning(mode: gameState.scriptDisplayMode)
+                return "\(header) \(instruction) Target: \(drag.targetChar). \(targetMeaning)."
+            }
+        case .combination:
+            if let combination = level.combination {
+                let instruction = combination.displayInstruction(mode: gameState.scriptDisplayMode)
+                let targetMeaning = combination.displayTargetMeaning(mode: gameState.scriptDisplayMode)
+                return "\(header) \(instruction) Target: \(combination.targetChar). \(targetMeaning)."
+            }
+        case .guess:
+            if let guess = level.guess {
+                let instruction = guess.displayInstruction(mode: gameState.scriptDisplayMode)
+                return "\(header) \(instruction) Result: \(guess.resultGlyph)."
+            }
+        case .free:
+            if let free = level.free {
+                let instruction = free.displayInstruction(mode: gameState.scriptDisplayMode)
+                return "\(header) \(instruction) Form \(free.targetCount) characters."
+            }
+        }
+
+        return header
     }
 }
 
@@ -305,32 +361,6 @@ private struct StageMenuFullScreen: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarBackground(Color.black.opacity(0.35), for: .navigationBar)
-            .onAppear {
-                // #region agent log
-                AgentRuntimeDebugLogger.log(
-                    hypothesisID: "H9",
-                    location: "StageManagerView.swift:190",
-                    message: "StageMenuFullScreen onAppear",
-                    data: [
-                        "flowState": "\(gameState.flowState)",
-                        "currentLevelIndex": gameState.currentLevelIndex,
-                    ]
-                )
-                // #endregion
-            }
-            .onDisappear {
-                // #region agent log
-                AgentRuntimeDebugLogger.log(
-                    hypothesisID: "H9",
-                    location: "StageManagerView.swift:203",
-                    message: "StageMenuFullScreen onDisappear",
-                    data: [
-                        "flowState": "\(gameState.flowState)",
-                        "currentLevelIndex": gameState.currentLevelIndex,
-                    ]
-                )
-                // #endregion
-            }
         }
     }
 

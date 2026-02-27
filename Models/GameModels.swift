@@ -7,6 +7,7 @@ enum AppFlowState: Hashable {
 }
 
 enum LevelType: Hashable {
+    case learn
     case observe
     case tracing
     case draw
@@ -15,6 +16,55 @@ enum LevelType: Hashable {
     case combination
     case guess
     case free
+}
+
+enum LearnInteraction: String, Hashable {
+    case observe
+    case trace
+    case drawFromMemory
+    case shakeReveal
+    case tapReveal
+    case pulseReveal
+    case silhouetteMatch
+    case memoryDraw
+    case swipeReveal
+}
+
+struct LearnCharacterData: Hashable {
+    let characterID: String
+    let sfSymbol: String
+    let oracleStrokes: [OracleStroke]
+    let modernGlyph: String
+    let meaning: String
+    let instruction: String
+    let interaction: LearnInteraction
+    let distractorShapes: [DistractorShape]
+
+    init(
+        characterID: String,
+        sfSymbol: String,
+        modernGlyph: String,
+        meaning: String,
+        instruction: String,
+        interaction: LearnInteraction,
+        distractorShapes: [DistractorShape] = []
+    ) {
+        self.characterID = characterID
+        self.sfSymbol = sfSymbol
+        self.oracleStrokes = OracleStrokePaths.strokes(for: characterID)
+        self.modernGlyph = modernGlyph
+        self.meaning = meaning
+        self.instruction = instruction
+        self.interaction = interaction
+        self.distractorShapes = distractorShapes
+    }
+}
+
+struct DistractorShape: Identifiable, Hashable {
+    let id: String
+    let label: String
+    let strokes: [OracleStroke]
+    let isCorrect: Bool
 }
 
 enum ScriptDisplayMode: Hashable {
@@ -562,6 +612,7 @@ struct WebLevel: Identifiable, Hashable {
     let wowPauseSeconds: Double
     let title: String
     let oracleTitle: String?
+    let learn: LearnCharacterData?
     let observe: ObserveLevelData?
     let tracing: TracingLevelData?
     let draw: DrawLevelData?
@@ -570,6 +621,34 @@ struct WebLevel: Identifiable, Hashable {
     let combination: CombinationLevelData?
     let guess: GuessLevelData?
     let free: FreeLevelData?
+
+    static func learn(
+        id: Int,
+        title: String,
+        oracleTitle: String? = nil,
+        emotion: JourneyEmotion = .curiosity,
+        wowPauseSeconds: Double = 2.5,
+        data: LearnCharacterData
+    ) -> WebLevel {
+        WebLevel(
+            id: id,
+            type: .learn,
+            action: JourneyAction(rawValue: data.interaction.rawValue) ?? .observe,
+            emotion: emotion,
+            wowPauseSeconds: wowPauseSeconds,
+            title: title,
+            oracleTitle: oracleTitle,
+            learn: data,
+            observe: nil,
+            tracing: nil,
+            draw: nil,
+            quiz: nil,
+            drag: nil,
+            combination: nil,
+            guess: nil,
+            free: nil
+        )
+    }
 
     static func observe(
         id: Int,
@@ -587,6 +666,7 @@ struct WebLevel: Identifiable, Hashable {
             wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            learn: nil,
             observe: data,
             tracing: nil,
             draw: nil,
@@ -614,6 +694,7 @@ struct WebLevel: Identifiable, Hashable {
             wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            learn: nil,
             observe: nil,
             tracing: data,
             draw: nil,
@@ -641,6 +722,7 @@ struct WebLevel: Identifiable, Hashable {
             wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            learn: nil,
             observe: nil,
             tracing: nil,
             draw: data,
@@ -668,6 +750,7 @@ struct WebLevel: Identifiable, Hashable {
             wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            learn: nil,
             observe: nil,
             tracing: nil,
             draw: nil,
@@ -695,6 +778,7 @@ struct WebLevel: Identifiable, Hashable {
             wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            learn: nil,
             observe: nil,
             tracing: nil,
             draw: nil,
@@ -722,6 +806,7 @@ struct WebLevel: Identifiable, Hashable {
             wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            learn: nil,
             observe: nil,
             tracing: nil,
             draw: nil,
@@ -749,6 +834,7 @@ struct WebLevel: Identifiable, Hashable {
             wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            learn: nil,
             observe: nil,
             tracing: nil,
             draw: nil,
@@ -776,6 +862,7 @@ struct WebLevel: Identifiable, Hashable {
             wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            learn: nil,
             observe: nil,
             tracing: nil,
             draw: nil,

@@ -35,16 +35,24 @@ struct GuessView: View {
                     Text("Result: \(guess.resultGlyph)")
                         .font(.system(.largeTitle, design: .serif, weight: .regular))
                         .padding(.top, 6)
+                        .accessibilityLabel("New character formed: \(guess.resultGlyph)")
 
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 130), spacing: 12), count: 2), spacing: 12) {
                         ForEach(guess.options) { option in
+                            let icon  = option.displayIcon(mode: gameState.scriptDisplayMode)
+                            let label = option.displayLabel(mode: gameState.scriptDisplayMode)
+                            let a11yValue: String = {
+                                guard let sel = selectedOptionID, sel == option.id else { return "" }
+                                return answeredCorrectly ? "Correct." : "Incorrect."
+                            }()
                             Button {
                                 choose(option: option, with: guess)
                             } label: {
                                 VStack(spacing: 6) {
-                                    Text(option.displayIcon(mode: gameState.scriptDisplayMode))
+                                    Text(icon)
                                         .font(.system(size: 42, weight: .regular, design: .serif))
-                                    Text(option.displayLabel(mode: gameState.scriptDisplayMode))
+                                        .accessibilityHidden(true)
+                                    Text(label)
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -53,6 +61,10 @@ struct GuessView: View {
                             }
                             .buttonStyle(.plain)
                             .disabled(answeredCorrectly || showEvolution)
+                            .accessibilityLabel("\(label), glyph \(icon)")
+                            .accessibilityValue(a11yValue)
+                            .accessibilityHint(answeredCorrectly || showEvolution ? "Selection locked" : "Select this meaning")
+                            .accessibilityAddTraits(selectedOptionID == option.id ? .isSelected : [])
                         }
                     }
                     .frame(maxWidth: 520)

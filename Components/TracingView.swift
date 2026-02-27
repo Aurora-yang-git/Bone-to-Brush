@@ -39,7 +39,8 @@ struct TracingView: View {
                                     .opacity(gameState.traceCompleted ? 1 : 0.40)
                                     .ignoresSafeArea()
                                     .animation(GameState.MotionContract.traceRevealEase, value: gameState.traceCompleted)
-                                    .accessibilityHidden(true)
+                                    .accessibilityLabel("Pictograph illustration: \(displayMeaning)")
+                                    .accessibilityAddTraits(.isImage)
                             }
 
                         VStack(spacing: 16) {
@@ -172,56 +173,6 @@ struct TracingView: View {
         .sensoryFeedback(.impact(weight: .light), trigger: confirmFeedbackToken)
         .onChange(of: level.id) { _, _ in
             continueEnabled = false
-        }
-        .onAppear {
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H12",
-                location: "TracingView.swift:176",
-                message: "TracingView onAppear",
-                data: [
-                    "levelID": level.id,
-                    "flowState": "\(gameState.flowState)",
-                    "imageAsset": level.tracing?.displayImageAsset(mode: gameState.scriptDisplayMode) ?? "nil",
-                    "scriptMode": "\(gameState.scriptDisplayMode)",
-                ]
-            )
-            // #endregion
-        }
-        .onDisappear {
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H12",
-                location: "TracingView.swift:189",
-                message: "TracingView onDisappear",
-                data: [
-                    "levelID": level.id,
-                    "flowState": "\(gameState.flowState)",
-                    "traceProgress": gameState.traceProgress,
-                    "traceCompleted": gameState.traceCompleted,
-                ]
-            )
-            // #endregion
-        }
-        .task(id: level.id) {
-            for tick in 1...8 {
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled else { return }
-                // #region agent log
-                AgentRuntimeDebugLogger.log(
-                    hypothesisID: "H17",
-                    location: "TracingView.swift:203",
-                    message: "Tracing heartbeat",
-                    data: [
-                        "tick": tick,
-                        "levelID": level.id,
-                        "traceProgress": gameState.traceProgress,
-                        "traceCompleted": gameState.traceCompleted,
-                        "flowState": "\(gameState.flowState)",
-                    ]
-                )
-                // #endregion
-            }
         }
         .onChange(of: gameState.traceCompleted) { _, newValue in
             if newValue {

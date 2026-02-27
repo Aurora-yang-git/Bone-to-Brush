@@ -3,7 +3,7 @@ import SwiftUI
 
 struct IntroView: View {
     @Bindable var gameState: GameState
-    @State private var revealTrigger = 0
+    @State private var didReveal = false
     @State private var startFeedbackToken = 0
     @ScaledMetric(relativeTo: .largeTitle) private var introTitleSize: CGFloat = 72
 
@@ -25,41 +25,21 @@ struct IntroView: View {
                     .frame(maxWidth: 680)
             }
             .padding(.horizontal, 24)
-            .phaseAnimator([0, 1], trigger: revealTrigger) { content, phase in
-                content
-                    .opacity(phase == 0 ? 0 : 1)
-                    .offset(y: phase == 0 ? 24 : 0)
-            } animation: { _ in
-                GameState.MotionContract.introTitleRevealEase
-            }
+            .opacity(didReveal ? 1 : 0.001)
+            .offset(y: didReveal ? 0 : 24)
+            .animation(GameState.MotionContract.introTitleRevealEase, value: didReveal)
 
             Button {
                 startFeedbackToken += 1
-                // #region agent log
-                AgentRuntimeDebugLogger.log(
-                    hypothesisID: "H1",
-                    location: "IntroView.swift:37",
-                    message: "Start button tapped",
-                    data: [
-                        "flowState": "\(gameState.flowState)",
-                        "currentLevelIndex": gameState.currentLevelIndex,
-                    ]
-                )
-                // #endregion
                 gameState.startJourney()
             } label: {
                 ZStack {
                     Circle()
                         .fill(Color.orange.opacity(0.18))
                         .frame(width: 160, height: 160)
-                        .blur(radius: 28)
-                        .phaseAnimator([0, 1], trigger: revealTrigger) { content, phase in
-                            content
-                                .scaleEffect(phase == 0 ? 0.65 : 1)
-                                .opacity(phase == 0 ? 0 : 1)
-                        } animation: { _ in
-                            GameState.MotionContract.introHaloRevealEase
-                        }
+                        .scaleEffect(didReveal ? 1 : 0.72)
+                        .opacity(didReveal ? 1 : 0.001)
+                        .animation(GameState.MotionContract.introHaloRevealEase, value: didReveal)
                     Label("Begin 3-Minute Journey", systemImage: "arrow.right")
                         .font(.title3.weight(.semibold))
                         .padding(.horizontal, 28)
@@ -73,29 +53,12 @@ struct IntroView: View {
                 }
             }
             .buttonStyle(.plain)
-            .phaseAnimator([0, 1], trigger: revealTrigger) { content, phase in
-                content
-                    .scaleEffect(phase == 0 ? 0.92 : 1)
-                    .opacity(phase == 0 ? 0 : 1)
-            } animation: { _ in
-                GameState.MotionContract.introButtonRevealEase
-            }
+            .scaleEffect(didReveal ? 1 : 0.94)
+            .opacity(didReveal ? 1 : 0.001)
+            .animation(GameState.MotionContract.introButtonRevealEase, value: didReveal)
             .accessibilityLabel("Start journey")
             .accessibilityHint("Enter the oracle script interactive flow")
             .frame(minWidth: 44, minHeight: 44)
-            .onAppear {
-                // #region agent log
-                AgentRuntimeDebugLogger.log(
-                    hypothesisID: "H14",
-                    location: "IntroView.swift:86",
-                    message: "Start button appeared",
-                    data: [
-                        "flowState": "\(gameState.flowState)",
-                        "revealTrigger": revealTrigger,
-                    ]
-                )
-                // #endregion
-            }
 
             Spacer()
 
@@ -103,79 +66,14 @@ struct IntroView: View {
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 26)
-                .phaseAnimator([0, 1], trigger: revealTrigger) { content, phase in
-                    content
-                        .opacity(phase == 0 ? 0 : 1)
-                        .offset(y: phase == 0 ? 6 : 0)
-                } animation: { _ in
-                    GameState.MotionContract.introFooterRevealEase
-                }
+                .opacity(didReveal ? 1 : 0.001)
+                .offset(y: didReveal ? 0 : 6)
+                .animation(GameState.MotionContract.introFooterRevealEase, value: didReveal)
         }
         .padding(24)
         .sensoryFeedback(.impact(weight: .light), trigger: startFeedbackToken)
-        .onAppear {
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H7",
-                location: "IntroView.swift:92",
-                message: "IntroView onAppear",
-                data: [
-                    "flowState": "\(gameState.flowState)",
-                    "currentLevelIndex": gameState.currentLevelIndex,
-                ]
-            )
-            // #endregion
-        }
-        .onDisappear {
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H7",
-                location: "IntroView.swift:104",
-                message: "IntroView onDisappear",
-                data: [
-                    "flowState": "\(gameState.flowState)",
-                    "currentLevelIndex": gameState.currentLevelIndex,
-                ]
-            )
-            // #endregion
-        }
         .task {
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H7",
-                location: "IntroView.swift:111",
-                message: "Intro reveal task fired",
-                data: [
-                    "flowState": "\(gameState.flowState)",
-                    "revealTriggerBefore": revealTrigger,
-                ]
-            )
-            // #endregion
-            revealTrigger += 1
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H14",
-                location: "IntroView.swift:152",
-                message: "Intro revealTrigger incremented",
-                data: [
-                    "revealTriggerAfter": revealTrigger,
-                    "flowState": "\(gameState.flowState)",
-                ]
-            )
-            // #endregion
-        }
-        .onChange(of: revealTrigger) { _, newValue in
-            // #region agent log
-            AgentRuntimeDebugLogger.log(
-                hypothesisID: "H14",
-                location: "IntroView.swift:163",
-                message: "revealTrigger changed",
-                data: [
-                    "newRevealTrigger": newValue,
-                    "flowState": "\(gameState.flowState)",
-                ]
-            )
-            // #endregion
+            didReveal = true
         }
     }
 }

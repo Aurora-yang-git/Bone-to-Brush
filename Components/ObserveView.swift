@@ -62,7 +62,9 @@ struct ObserveView: View {
                 }
                 .frame(width: 300, height: 300)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Oracle to modern character transition")
+                .accessibilityLabel("Character evolution animation")
+                .accessibilityValue("Oracle pictograph: \(observe.oracleGlyph). Modern character: \(observe.modernGlyph).")
+                .accessibilityHint("The original drawn symbol transforms into the modern written character.")
 
                 Text(observe.detail)
                     .font(.body)
@@ -90,18 +92,6 @@ struct ObserveView: View {
             }
             .padding(.horizontal, 24)
             .task(id: level.id) {
-                // #region agent log
-                AgentRuntimeDebugLogger.log(
-                    hypothesisID: "H4",
-                    location: "ObserveView.swift:92",
-                    message: "Observe task started",
-                    data: [
-                        "levelID": level.id,
-                        "wowPauseSeconds": level.wowPauseSeconds,
-                        "hasObserveData": level.observe != nil,
-                    ]
-                )
-                // #endregion
                 phase = 0
                 continueEnabled = false
                 withAnimation(GameState.MotionContract.fastEase) {
@@ -111,30 +101,8 @@ struct ObserveView: View {
                 withAnimation(GameState.MotionContract.successSpring) {
                     phase = 2
                 }
-                // #region agent log
-                AgentRuntimeDebugLogger.log(
-                    hypothesisID: "H4",
-                    location: "ObserveView.swift:101",
-                    message: "Observe reached morph phase 2",
-                    data: [
-                        "levelID": level.id,
-                        "phase": phase,
-                    ]
-                )
-                // #endregion
                 try? await Task.sleep(for: .seconds(level.wowPauseSeconds))
                 continueEnabled = true
-                // #region agent log
-                AgentRuntimeDebugLogger.log(
-                    hypothesisID: "H4",
-                    location: "ObserveView.swift:110",
-                    message: "Observe continue enabled",
-                    data: [
-                        "levelID": level.id,
-                        "continueEnabled": continueEnabled,
-                    ]
-                )
-                // #endregion
             }
             .sensoryFeedback(.impact(weight: .light), trigger: continueFeedbackToken)
         )

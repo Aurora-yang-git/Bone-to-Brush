@@ -8,7 +8,10 @@ struct EndingView: View {
     @ScaledMetric(relativeTo: .largeTitle) private var endingTitleSize: CGFloat = 52
     @ScaledMetric(relativeTo: .title2) private var showcaseGlyphSize: CGFloat = 38
 
-    private let showcaseGlyphs = ["\u{4F11}", "\u{4ECE}", "\u{4F17}", "\u{660E}", "\u{8A00}", "\u{4FE1}"]
+    private let showcaseGlyphs = [
+        "\u{65E5}", "\u{6708}", "\u{4EBA}", "\u{6728}", "\u{53E3}", "\u{5FC3}", "\u{5973}", "\u{5B50}", "\u{4E00}",
+        "\u{6797}", "\u{597D}", "\u{4F11}", "\u{660E}",
+    ]
 
     var body: some View {
         ZStack {
@@ -25,7 +28,7 @@ struct EndingView: View {
                         .foregroundStyle(Color(red: 0.98, green: 0.95, blue: 0.88))
                         .contentTransition(.opacity)
                         .accessibilityAddTraits(.isHeader)
-                    Text("You started by watching. Then tracing. Then drawing from memory. Then choosing, dragging, guessing, and finally creating your own characters. You just replayed a small piece of how civilization wrote the world down.")
+                    Text("You watched the sun become a mark. Traced the moon. Drew a person from memory. Cracked open a tree. Spoke a mouth into being. Felt a heartbeat draw a heart. You recognized, remembered, swiped, combined, and created. 3,000 years of writing, replayed in your hands.")
                         .font(.title3.weight(.light))
                         .foregroundStyle(Color.white.opacity(0.72))
                         .multilineTextAlignment(.center)
