@@ -9,11 +9,14 @@ struct EvolutionStageView: View {
     let onAnimationComplete: () -> Void
 
     @State private var phaseTrigger = 0
+    @ScaledMetric(relativeTo: .title) private var ingredientGlyphSize: CGFloat = 62
+    @ScaledMetric(relativeTo: .largeTitle) private var resultGlyphSize: CGFloat = 120
+    @ScaledMetric(relativeTo: .title3) private var meaningOffsetY: CGFloat = 104
 
     var body: some View {
         GeometryReader { geo in
             stage(for: 0, size: geo.size)
-                .phaseAnimator([0, 1, 2], trigger: phaseTrigger) { _, phase in
+                .phaseAnimator([0, 1, 2, 3], trigger: phaseTrigger) { _, phase in
                     stage(for: phase, size: geo.size)
                 } animation: { phase in
                     switch phase {
@@ -21,6 +24,8 @@ struct EvolutionStageView: View {
                         return GameState.MotionContract.fastEase
                     case 1:
                         return GameState.MotionContract.successSpring
+                    case 2:
+                        return GameState.MotionContract.fastEase
                     default:
                         return GameState.MotionContract.microEase
                     }
@@ -37,33 +42,66 @@ struct EvolutionStageView: View {
 
     private func stage(for phase: Int, size: CGSize) -> some View {
         ZStack {
-            Color.black.opacity(0.20)
+            Color.black.opacity(0.16)
                 .ignoresSafeArea()
 
             ZStack {
+                let center = baseCenter(in: size)
+
+                if phase >= 2 {
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [Color.white.opacity(0.30), Color.clear],
+                                center: .center,
+                                startRadius: 8,
+                                endRadius: 170
+                            )
+                        )
+                        .frame(width: phase == 2 ? 210 : 270, height: phase == 2 ? 210 : 270)
+                        .position(center)
+                        .opacity(phase == 2 ? 1 : 0.45)
+                        .blendMode(.screen)
+
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.42), lineWidth: 2)
+                        .frame(width: phase == 2 ? 120 : 220, height: phase == 2 ? 120 : 220)
+                        .position(center)
+                        .opacity(phase == 2 ? 0.9 : 0.1)
+                        .blendMode(.screen)
+                }
+
                 ForEach(Array(ingredients.enumerated()), id: \.offset) { index, ingredient in
                     Text(ingredient.icon)
-                        .font(.system(size: 62, weight: .regular, design: .serif))
+                        .font(.system(size: ingredientGlyphSize, weight: .regular, design: .serif))
                         .position(ingredientPosition(index: index, in: size))
-                        .opacity(phase < 2 ? 1 : 0)
-                        .scaleEffect(phase == 0 ? 1 : 0.82)
+                        .opacity(phase == 3 ? 0 : (phase == 2 ? 0.25 : 1))
+                        .scaleEffect(phase == 0 ? 1 : (phase == 1 ? 0.86 : 0.72))
                 }
 
                 Text(resultGlyph)
-                    .font(.system(size: 120, weight: .regular, design: .serif))
+                    .font(.system(size: resultGlyphSize, weight: .regular, design: .serif))
                     .foregroundStyle(.primary)
-                    .position(baseCenter(in: size))
-                    .opacity(phase == 0 ? 0 : (phase == 1 ? 0.32 : 1))
-                    .scaleEffect(phase == 0 ? 0.72 : (phase == 1 ? 0.9 : 1.08))
+                    .position(center)
+                    .opacity(
+                        phase == 0 ? 0
+                            : (phase == 1 ? 0.24
+                                : (phase == 2 ? 0.70 : 1))
+                    )
+                    .scaleEffect(
+                        phase == 0 ? 0.70
+                            : (phase == 1 ? 0.88
+                                : (phase == 2 ? 0.98 : 1.06))
+                    )
                     .contentTransition(.opacity)
 
-                if phase == 2 {
+                if phase == 3 {
                     Text(resultMeaning)
                         .font(.title3.weight(.medium))
                         .padding(.horizontal, 18)
                         .padding(.vertical, 10)
                         .background(Color.white.opacity(0.85), in: Capsule(style: .continuous))
-                        .position(x: baseCenter(in: size).x, y: baseCenter(in: size).y + 104)
+                        .position(x: center.x, y: center.y + meaningOffsetY)
                         .transition(.opacity.combined(with: .scale))
                 }
             }

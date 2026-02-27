@@ -2,18 +2,26 @@ import Observation
 import SwiftUI
 
 struct TracingView: View {
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Bindable var gameState: GameState
     let level: WebLevel
     @Namespace private var statusNamespace
     @State private var confirmFeedbackToken = 0
+    @State private var continueEnabled = false
+    @ScaledMetric(relativeTo: .title2) private var traceTitleLarge: CGFloat = 36
+    @ScaledMetric(relativeTo: .title2) private var traceTitleSmall: CGFloat = 30
+    @ScaledMetric(relativeTo: .title2) private var traceCharacterOffset: CGFloat = 8
+    @ScaledMetric(relativeTo: .title3) private var traceHintIconSize: CGFloat = 28
+    @ScaledMetric(relativeTo: .body) private var traceCompletionBadgeSize: CGFloat = 20
 
     var body: some View {
+        let voiceOverModeEnabled = voiceOverEnabled || gameState.a11yPreviewVoiceOverEnabled
         Group {
             if let tracing = level.tracing {
                 GeometryReader { geo in
                     let canvasSide = adaptiveCanvasSide(in: geo.size)
                     let containerSide = canvasSide + 40
-                    let titleFont = canvasSide >= 360 ? 36.0 : 30.0
+                    let titleFont: CGFloat = canvasSide >= 360 ? traceTitleLarge : traceTitleSmall
                     let displayCharacter = tracing.displayCharacter(mode: gameState.scriptDisplayMode)
                     let displayMeaning = tracing.displayMeaning(mode: gameState.scriptDisplayMode)
                     let displayExplanation = tracing.displayExplanation(mode: gameState.scriptDisplayMode)
@@ -37,7 +45,7 @@ struct TracingView: View {
                         VStack(spacing: 16) {
                             VStack(spacing: 6) {
                                 Text(displayCharacter)
-                                    .font(.system(size: titleFont + 8, weight: .regular, design: .serif))
+                                    .font(.system(size: titleFont + traceCharacterOffset, weight: .regular, design: .serif))
                                     .foregroundStyle(.primary)
                                 Text(displayMeaning)
                                     .font(.subheadline)
@@ -58,6 +66,7 @@ struct TracingView: View {
                                 TraceCanvasView(
                                     guide: tracing.guide,
                                     targetGlyph: canvasOverlayGlyph,
+                                    voiceOverModeEnabled: voiceOverModeEnabled,
                                     resetKey: level.id,
                                     progress: gameState.traceProgress,
                                     canvasSize: CGSize(width: canvasSide, height: canvasSide),
@@ -68,9 +77,9 @@ struct TracingView: View {
                                 .frame(width: canvasSide, height: canvasSide)
                                 .clipped()
                                 .overlay(alignment: .bottomTrailing) {
-                                    if gameState.traceProgress < 0.01 && !gameState.traceCompleted {
+                                    if !voiceOverModeEnabled, gameState.traceProgress < 0.01 && !gameState.traceCompleted {
                                         Image(systemName: "pencil")
-                                            .font(.system(size: 28, weight: .medium))
+                                            .font(.system(size: traceHintIconSize, weight: .medium))
                                             .rotationEffect(.degrees(-45))
                                             .offset(x: 10, y: 10)
                                             .opacity(0.55)
@@ -84,15 +93,27 @@ struct TracingView: View {
                             .shadow(color: .black.opacity(0.18), radius: 18, x: 0, y: 8)
 
                             if gameState.traceCompleted {
-                                Label(displayExplanation, systemImage: "checkmark.seal.fill")
-                                    .font(.system(size: 20, weight: .regular, design: .serif))
-                                    .foregroundStyle(.primary)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 9)
-                                    .background(Color.white.opacity(0.82), in: Capsule(style: .continuous))
-                                    .matchedGeometryEffect(id: "trace-status", in: statusNamespace)
-                                    .transition(.opacity.combined(with: .scale))
-                                    .accessibilityHint("Tracing is complete for this level")
+                                VStack(spacing: 10) {
+                                    Label(displayExplanation, systemImage: "checkmark.seal.fill")
+                                        .font(.system(size: traceCompletionBadgeSize, weight: .regular, design: .serif))
+                                        .foregroundStyle(.primary)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 9)
+                                        .background(Color.white.opacity(0.82), in: Capsule(style: .continuous))
+                                        .accessibilityHint("Tracing is complete for this level")
+
+                                    Button {
+                                        gameState.advanceLevel()
+                                    } label: {
+                                        Label("Continue", systemImage: "arrow.right.circle.fill")
+                                            .font(.headline)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .disabled(!continueEnabled)
+                                    .opacity(continueEnabled ? 1 : 0.52)
+                                }
+                                .matchedGeometryEffect(id: "trace-status", in: statusNamespace)
+                                .transition(.opacity.combined(with: .scale))
                             } else {
                                 VStack(spacing: 10) {
                                     ProgressView(value: Double(gameState.traceProgress), total: 1.0)
@@ -126,13 +147,13 @@ struct TracingView: View {
                                             Label("Confirm", systemImage: "checkmark")
                                         }
                                         .disabled(gameState.traceProgress <= 0.01)
-                                        .accessibilityHint("Submit tracing and continue to the next chapter")
+                                        .accessibilityHint("Submit tracing result")
                                     }
                                     .controlGroupStyle(.navigation)
                                 }
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 12)
-                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .background(Color.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                                 .matchedGeometryEffect(id: "trace-status", in: statusNamespace)
                             }
                         }
@@ -149,6 +170,70 @@ struct TracingView: View {
         }
         .sensoryFeedback(.success, trigger: gameState.traceCompleted)
         .sensoryFeedback(.impact(weight: .light), trigger: confirmFeedbackToken)
+        .onChange(of: level.id) { _, _ in
+            continueEnabled = false
+        }
+        .onAppear {
+            // #region agent log
+            AgentRuntimeDebugLogger.log(
+                hypothesisID: "H12",
+                location: "TracingView.swift:176",
+                message: "TracingView onAppear",
+                data: [
+                    "levelID": level.id,
+                    "flowState": "\(gameState.flowState)",
+                    "imageAsset": level.tracing?.displayImageAsset(mode: gameState.scriptDisplayMode) ?? "nil",
+                    "scriptMode": "\(gameState.scriptDisplayMode)",
+                ]
+            )
+            // #endregion
+        }
+        .onDisappear {
+            // #region agent log
+            AgentRuntimeDebugLogger.log(
+                hypothesisID: "H12",
+                location: "TracingView.swift:189",
+                message: "TracingView onDisappear",
+                data: [
+                    "levelID": level.id,
+                    "flowState": "\(gameState.flowState)",
+                    "traceProgress": gameState.traceProgress,
+                    "traceCompleted": gameState.traceCompleted,
+                ]
+            )
+            // #endregion
+        }
+        .task(id: level.id) {
+            for tick in 1...8 {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                // #region agent log
+                AgentRuntimeDebugLogger.log(
+                    hypothesisID: "H17",
+                    location: "TracingView.swift:203",
+                    message: "Tracing heartbeat",
+                    data: [
+                        "tick": tick,
+                        "levelID": level.id,
+                        "traceProgress": gameState.traceProgress,
+                        "traceCompleted": gameState.traceCompleted,
+                        "flowState": "\(gameState.flowState)",
+                    ]
+                )
+                // #endregion
+            }
+        }
+        .onChange(of: gameState.traceCompleted) { _, newValue in
+            if newValue {
+                continueEnabled = false
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(level.wowPauseSeconds))
+                    continueEnabled = true
+                }
+            } else {
+                continueEnabled = false
+            }
+        }
     }
 
     private func adaptiveCanvasSide(in size: CGSize) -> CGFloat {

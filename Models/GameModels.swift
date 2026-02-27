@@ -7,15 +7,43 @@ enum AppFlowState: Hashable {
 }
 
 enum LevelType: Hashable {
+    case observe
     case tracing
+    case draw
     case quiz
+    case drag
     case combination
+    case guess
     case free
 }
 
 enum ScriptDisplayMode: Hashable {
     case oraclePreferred
     case modern
+}
+
+enum JourneyAction: String, Hashable {
+    case observe
+    case trace
+    case draw
+    case match
+    case drag
+    case combine
+    case guess
+    case create
+}
+
+enum JourneyEmotion: String, Hashable {
+    case curiosity
+    case understanding
+    case confidence
+    case achievement
+}
+
+enum HintStrategy: Hashable {
+    case explicit
+    case subtle
+    case none
 }
 
 enum SpatialRule: Hashable {
@@ -168,6 +196,14 @@ struct DistractorRule: Hashable {
     let message: String
 }
 
+struct ObserveLevelData: Hashable {
+    let worldSymbol: String
+    let oracleGlyph: String
+    let modernGlyph: String
+    let instruction: String
+    let detail: String
+}
+
 struct TracingLevelData: Hashable {
     let character: String
     let meaning: String
@@ -233,6 +269,81 @@ struct TracingLevelData: Hashable {
     }
 }
 
+struct DrawLevelData: Hashable {
+    let character: String
+    let meaning: String
+    let guide: TraceGuide
+    let instruction: String
+    let explanation: String
+    let imageAssetName: String
+    let oracleCharacter: String?
+    let oracleMeaning: String?
+    let oracleInstruction: String?
+    let oracleExplanation: String?
+    let oracleImageAssetName: String?
+
+    init(
+        character: String,
+        meaning: String,
+        guide: TraceGuide,
+        instruction: String,
+        explanation: String,
+        imageAssetName: String,
+        oracleCharacter: String? = nil,
+        oracleMeaning: String? = nil,
+        oracleInstruction: String? = nil,
+        oracleExplanation: String? = nil,
+        oracleImageAssetName: String? = nil
+    ) {
+        self.character = character
+        self.meaning = meaning
+        self.guide = guide
+        self.instruction = instruction
+        self.explanation = explanation
+        self.imageAssetName = imageAssetName
+        self.oracleCharacter = oracleCharacter
+        self.oracleMeaning = oracleMeaning
+        self.oracleInstruction = oracleInstruction
+        self.oracleExplanation = oracleExplanation
+        self.oracleImageAssetName = oracleImageAssetName
+    }
+
+    func displayCharacter(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleCharacter {
+            return oracleCharacter
+        }
+        return character
+    }
+
+    func displayMeaning(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleMeaning {
+            return oracleMeaning
+        }
+        return meaning
+    }
+
+    func displayInstruction(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleInstruction {
+            return oracleInstruction
+        }
+        return instruction
+    }
+
+    func displayExplanation(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleExplanation {
+            return oracleExplanation
+        }
+        return explanation
+    }
+
+    func displayImageAsset(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleImageAssetName {
+            return oracleImageAssetName
+        }
+        return imageAssetName
+    }
+}
+
 struct QuizLevelData: Hashable {
     let question: String
     let options: [LevelOption]
@@ -269,10 +380,95 @@ struct QuizLevelData: Hashable {
     }
 }
 
+struct DragLevelData: Hashable {
+    let instruction: String
+    let targetMeaning: String
+    let targetChar: String
+    let baseInventory: [InventoryToken]
+    let recipe: CombinationRecipe
+    let oracleInstruction: String?
+    let oracleTargetMeaning: String?
+
+    init(
+        instruction: String,
+        targetMeaning: String,
+        targetChar: String,
+        baseInventory: [InventoryToken],
+        recipe: CombinationRecipe,
+        oracleInstruction: String? = nil,
+        oracleTargetMeaning: String? = nil
+    ) {
+        self.instruction = instruction
+        self.targetMeaning = targetMeaning
+        self.targetChar = targetChar
+        self.baseInventory = baseInventory
+        self.recipe = recipe
+        self.oracleInstruction = oracleInstruction
+        self.oracleTargetMeaning = oracleTargetMeaning
+    }
+
+    func displayInstruction(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleInstruction {
+            return oracleInstruction
+        }
+        return instruction
+    }
+
+    func displayTargetMeaning(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleTargetMeaning {
+            return oracleTargetMeaning
+        }
+        return targetMeaning
+    }
+}
+
+struct GuessLevelData: Hashable {
+    let instruction: String
+    let ingredients: [EvolutionIngredient]
+    let resultGlyph: String
+    let options: [LevelOption]
+    let explanation: String
+    let oracleInstruction: String?
+    let oracleExplanation: String?
+
+    init(
+        instruction: String,
+        ingredients: [EvolutionIngredient],
+        resultGlyph: String,
+        options: [LevelOption],
+        explanation: String,
+        oracleInstruction: String? = nil,
+        oracleExplanation: String? = nil
+    ) {
+        self.instruction = instruction
+        self.ingredients = ingredients
+        self.resultGlyph = resultGlyph
+        self.options = options
+        self.explanation = explanation
+        self.oracleInstruction = oracleInstruction
+        self.oracleExplanation = oracleExplanation
+    }
+
+    func displayInstruction(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleInstruction {
+            return oracleInstruction
+        }
+        return instruction
+    }
+
+    func displayExplanation(mode: ScriptDisplayMode) -> String {
+        if mode == .oraclePreferred, let oracleExplanation {
+            return oracleExplanation
+        }
+        return explanation
+    }
+}
+
 struct CombinationLevelData: Hashable {
     let instruction: String
     let targetMeaning: String
     let targetChar: String
+    let hintStrategy: HintStrategy
     let baseInventory: [InventoryToken]
     let recipes: [CombinationRecipe]
     let distractors: [DistractorRule]
@@ -283,6 +479,7 @@ struct CombinationLevelData: Hashable {
         instruction: String,
         targetMeaning: String,
         targetChar: String,
+        hintStrategy: HintStrategy = .explicit,
         baseInventory: [InventoryToken],
         recipes: [CombinationRecipe],
         distractors: [DistractorRule],
@@ -292,6 +489,7 @@ struct CombinationLevelData: Hashable {
         self.instruction = instruction
         self.targetMeaning = targetMeaning
         self.targetChar = targetChar
+        self.hintStrategy = hintStrategy
         self.baseInventory = baseInventory
         self.recipes = recipes
         self.distractors = distractors
@@ -359,61 +557,232 @@ struct FreeLevelData: Hashable {
 struct WebLevel: Identifiable, Hashable {
     let id: Int
     let type: LevelType
+    let action: JourneyAction
+    let emotion: JourneyEmotion
+    let wowPauseSeconds: Double
     let title: String
     let oracleTitle: String?
+    let observe: ObserveLevelData?
     let tracing: TracingLevelData?
+    let draw: DrawLevelData?
     let quiz: QuizLevelData?
+    let drag: DragLevelData?
     let combination: CombinationLevelData?
+    let guess: GuessLevelData?
     let free: FreeLevelData?
 
-    static func tracing(id: Int, title: String, oracleTitle: String? = nil, data: TracingLevelData) -> WebLevel {
+    static func observe(
+        id: Int,
+        title: String,
+        oracleTitle: String? = nil,
+        emotion: JourneyEmotion = .curiosity,
+        wowPauseSeconds: Double = 1.0,
+        data: ObserveLevelData
+    ) -> WebLevel {
+        WebLevel(
+            id: id,
+            type: .observe,
+            action: .observe,
+            emotion: emotion,
+            wowPauseSeconds: wowPauseSeconds,
+            title: title,
+            oracleTitle: oracleTitle,
+            observe: data,
+            tracing: nil,
+            draw: nil,
+            quiz: nil,
+            drag: nil,
+            combination: nil,
+            guess: nil,
+            free: nil
+        )
+    }
+
+    static func tracing(
+        id: Int,
+        title: String,
+        oracleTitle: String? = nil,
+        emotion: JourneyEmotion = .curiosity,
+        wowPauseSeconds: Double = 1.0,
+        data: TracingLevelData
+    ) -> WebLevel {
         WebLevel(
             id: id,
             type: .tracing,
+            action: .trace,
+            emotion: emotion,
+            wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            observe: nil,
             tracing: data,
+            draw: nil,
             quiz: nil,
+            drag: nil,
             combination: nil,
+            guess: nil,
             free: nil
         )
     }
 
-    static func quiz(id: Int, title: String, oracleTitle: String? = nil, data: QuizLevelData) -> WebLevel {
+    static func draw(
+        id: Int,
+        title: String,
+        oracleTitle: String? = nil,
+        emotion: JourneyEmotion = .understanding,
+        wowPauseSeconds: Double = 1.0,
+        data: DrawLevelData
+    ) -> WebLevel {
+        WebLevel(
+            id: id,
+            type: .draw,
+            action: .draw,
+            emotion: emotion,
+            wowPauseSeconds: wowPauseSeconds,
+            title: title,
+            oracleTitle: oracleTitle,
+            observe: nil,
+            tracing: nil,
+            draw: data,
+            quiz: nil,
+            drag: nil,
+            combination: nil,
+            guess: nil,
+            free: nil
+        )
+    }
+
+    static func quiz(
+        id: Int,
+        title: String,
+        oracleTitle: String? = nil,
+        emotion: JourneyEmotion = .understanding,
+        wowPauseSeconds: Double = 0,
+        data: QuizLevelData
+    ) -> WebLevel {
         WebLevel(
             id: id,
             type: .quiz,
+            action: .match,
+            emotion: emotion,
+            wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            observe: nil,
             tracing: nil,
+            draw: nil,
             quiz: data,
+            drag: nil,
             combination: nil,
+            guess: nil,
             free: nil
         )
     }
 
-    static func combination(id: Int, title: String, oracleTitle: String? = nil, data: CombinationLevelData) -> WebLevel {
+    static func drag(
+        id: Int,
+        title: String,
+        oracleTitle: String? = nil,
+        emotion: JourneyEmotion = .confidence,
+        wowPauseSeconds: Double = 1.0,
+        data: DragLevelData
+    ) -> WebLevel {
+        WebLevel(
+            id: id,
+            type: .drag,
+            action: .drag,
+            emotion: emotion,
+            wowPauseSeconds: wowPauseSeconds,
+            title: title,
+            oracleTitle: oracleTitle,
+            observe: nil,
+            tracing: nil,
+            draw: nil,
+            quiz: nil,
+            drag: data,
+            combination: nil,
+            guess: nil,
+            free: nil
+        )
+    }
+
+    static func combination(
+        id: Int,
+        title: String,
+        oracleTitle: String? = nil,
+        emotion: JourneyEmotion = .confidence,
+        wowPauseSeconds: Double = 1.0,
+        data: CombinationLevelData
+    ) -> WebLevel {
         WebLevel(
             id: id,
             type: .combination,
+            action: .combine,
+            emotion: emotion,
+            wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            observe: nil,
             tracing: nil,
+            draw: nil,
             quiz: nil,
+            drag: nil,
             combination: data,
+            guess: nil,
             free: nil
         )
     }
 
-    static func free(id: Int, title: String, oracleTitle: String? = nil, data: FreeLevelData) -> WebLevel {
+    static func guess(
+        id: Int,
+        title: String,
+        oracleTitle: String? = nil,
+        emotion: JourneyEmotion = .confidence,
+        wowPauseSeconds: Double = 1.0,
+        data: GuessLevelData
+    ) -> WebLevel {
+        WebLevel(
+            id: id,
+            type: .guess,
+            action: .guess,
+            emotion: emotion,
+            wowPauseSeconds: wowPauseSeconds,
+            title: title,
+            oracleTitle: oracleTitle,
+            observe: nil,
+            tracing: nil,
+            draw: nil,
+            quiz: nil,
+            drag: nil,
+            combination: nil,
+            guess: data,
+            free: nil
+        )
+    }
+
+    static func free(
+        id: Int,
+        title: String,
+        oracleTitle: String? = nil,
+        emotion: JourneyEmotion = .achievement,
+        wowPauseSeconds: Double = 0,
+        data: FreeLevelData
+    ) -> WebLevel {
         WebLevel(
             id: id,
             type: .free,
+            action: .create,
+            emotion: emotion,
+            wowPauseSeconds: wowPauseSeconds,
             title: title,
             oracleTitle: oracleTitle,
+            observe: nil,
             tracing: nil,
+            draw: nil,
             quiz: nil,
+            drag: nil,
             combination: nil,
+            guess: nil,
             free: data
         )
     }

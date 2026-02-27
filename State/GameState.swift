@@ -4,37 +4,37 @@ import SwiftUI
 @Observable @MainActor
 final class GameState {
     enum MotionContract {
-        static let standardSpring = Animation.spring(response: 0.34, dampingFraction: 0.76)
-        static let fastEase = Animation.easeInOut(duration: 0.20)
+        static let standardSpring = Animation.spring(response: 0.28, dampingFraction: 0.82)
+        static let fastEase = Animation.easeInOut(duration: 0.18)
         static let traceProgressEase = Animation.easeInOut(duration: 0.12)
-        static let microEase = Animation.easeInOut(duration: 0.16)
+        static let microEase = Animation.easeInOut(duration: 0.14)
         static let tilePressEase = Animation.easeInOut(duration: 0.12)
-        static let traceRevealEase = Animation.easeInOut(duration: 0.80)
-        static let resultRevealEase = Animation.easeInOut(duration: 0.20)
-        static let introTitleRevealEase = Animation.easeOut(duration: 0.75)
-        static let introHaloRevealEase = Animation.easeOut(duration: 0.80)
-        static let introButtonRevealEase = Animation.easeOut(duration: 0.70)
-        static let introFooterRevealEase = Animation.easeOut(duration: 0.55)
-        static let endingTitleRevealEase = Animation.easeOut(duration: 0.65)
-        static let endingGlyphRevealSpring = Animation.spring(response: 0.35, dampingFraction: 0.78)
-        static let endingButtonRevealEase = Animation.easeOut(duration: 0.55)
-        static let successSpring = Animation.spring(response: 0.42, dampingFraction: 0.78)
-        static let repelSpring = Animation.spring(response: 0.22, dampingFraction: 0.58)
-        static let returnSpring = Animation.spring(response: 0.30, dampingFraction: 0.72)
+        static let traceRevealEase = Animation.easeInOut(duration: 0.38)
+        static let resultRevealEase = Animation.easeInOut(duration: 0.18)
+        static let introTitleRevealEase = Animation.easeOut(duration: 0.52)
+        static let introHaloRevealEase = Animation.easeOut(duration: 0.60)
+        static let introButtonRevealEase = Animation.easeOut(duration: 0.45)
+        static let introFooterRevealEase = Animation.easeOut(duration: 0.40)
+        static let endingTitleRevealEase = Animation.easeOut(duration: 0.50)
+        static let endingGlyphRevealSpring = Animation.spring(response: 0.28, dampingFraction: 0.80)
+        static let endingButtonRevealEase = Animation.easeOut(duration: 0.42)
+        static let successSpring = Animation.spring(response: 0.32, dampingFraction: 0.80)
+        static let repelSpring = Animation.spring(response: 0.18, dampingFraction: 0.62)
+        static let returnSpring = Animation.spring(response: 0.24, dampingFraction: 0.76)
 
-        static let defaultAdvanceDelaySeconds: Double = 1.0
-        static let tracingAdvanceDelaySeconds: Double = 2.0
-        static let combinationAdvanceDelaySeconds: Double = 1.5
+        static let defaultAdvanceDelaySeconds: Double = 0.9
+        static let tracingAdvanceDelaySeconds: Double = 1.0
+        static let combinationAdvanceDelaySeconds: Double = 1.0
         static let repelClearDelay: Duration = .milliseconds(650)
         static let returnClearDelay: Duration = .milliseconds(540)
         static let feedbackClearDelay: Duration = .milliseconds(420)
-        static let transientFeedbackClearDelay: Duration = .seconds(2.0)
-        static let secondaryResultHoldDelay: Duration = .seconds(1.0)
-        static let evolutionStageDuration: Duration = .milliseconds(1900)
+        static let transientFeedbackClearDelay: Duration = .milliseconds(1150)
+        static let secondaryResultHoldDelay: Duration = .milliseconds(850)
+        static let evolutionStageDuration: Duration = .milliseconds(1650)
 
-        static let quizRevealDelay: Duration = .milliseconds(500)
-        static let quizAutoAdvanceDelay: Duration = .milliseconds(2500)
-        static let quizWrongResetDelay: Duration = .seconds(1.0)
+        static let quizRevealDelay: Duration = .milliseconds(320)
+        static let quizAutoAdvanceDelay: Duration = .milliseconds(1200)
+        static let quizWrongResetDelay: Duration = .milliseconds(650)
 
         static let repelOffsetX: CGFloat = 18
         static let returnOffsetY: CGFloat = 176
@@ -42,11 +42,42 @@ final class GameState {
     }
 
     // MARK: App flow
-    var flowState: AppFlowState = .intro
-    var currentLevelIndex = 0
+    var flowState: AppFlowState = .intro {
+        didSet {
+            // #region agent log
+            AgentRuntimeDebugLogger.log(
+                hypothesisID: "H6",
+                location: "GameState.swift:46",
+                message: "flowState changed",
+                data: [
+                    "oldValue": "\(oldValue)",
+                    "newValue": "\(flowState)",
+                    "currentLevelIndex": currentLevelIndex,
+                ]
+            )
+            // #endregion
+        }
+    }
+    var currentLevelIndex = 0 {
+        didSet {
+            // #region agent log
+            AgentRuntimeDebugLogger.log(
+                hypothesisID: "H6",
+                location: "GameState.swift:57",
+                message: "currentLevelIndex changed",
+                data: [
+                    "oldValue": oldValue,
+                    "newValue": currentLevelIndex,
+                    "flowState": "\(flowState)",
+                ]
+            )
+            // #endregion
+        }
+    }
     var showLevelMenu = false
     var audioEnabled = false
     var scriptDisplayMode: ScriptDisplayMode = .modern
+    var a11yPreviewVoiceOverEnabled = false
 
     // MARK: Tracing state
     var traceProgress: CGFloat = 0
@@ -89,14 +120,50 @@ final class GameState {
 
     init() {
         self.levels = WebLevel.all
+        // #region agent log
+        AgentRuntimeDebugLogger.log(
+            hypothesisID: "H6",
+            location: "GameState.swift:116",
+            message: "GameState initialized",
+            data: [
+                "levelsCount": levels.count,
+                "initialFlowState": "\(flowState)",
+                "initialLevelIndex": currentLevelIndex,
+                "gameStateID": ObjectIdentifier(self).hashValue,
+            ]
+        )
+        // #endregion
     }
 
     // MARK: App actions
     func startJourney() {
+        // #region agent log
+        AgentRuntimeDebugLogger.log(
+            hypothesisID: "H1",
+            location: "GameState.swift:95",
+            message: "startJourney invoked",
+            data: [
+                "flowStateBefore": "\(flowState)",
+                "currentLevelIndexBefore": currentLevelIndex,
+                "levelsCount": levels.count,
+            ]
+        )
+        // #endregion
         enterPlaying(at: 0)
     }
 
     func restartJourney() {
+        // #region agent log
+        AgentRuntimeDebugLogger.log(
+            hypothesisID: "H6",
+            location: "GameState.swift:124",
+            message: "restartJourney invoked",
+            data: [
+                "flowStateBefore": "\(flowState)",
+                "currentLevelIndexBefore": currentLevelIndex,
+            ]
+        )
+        // #endregion
         advanceTask?.cancel()
         quizTask?.cancel()
         flowState = .intro
@@ -200,7 +267,6 @@ final class GameState {
     func confirmTrace() {
         guard traceProgress > 0.01 else { return }
         traceCompleted = true
-        scheduleAdvance(delaySeconds: MotionContract.tracingAdvanceDelaySeconds)
     }
 
     private func traceCoverage(points: [CGPoint], guide: TraceGuide) -> CGFloat {
@@ -239,9 +305,6 @@ final class GameState {
                     self.quizShowExplanation = true
                     self.quizFeedback = quiz.displayExplanation(mode: self.scriptDisplayMode)
                 }
-                try? await Task.sleep(for: MotionContract.quizAutoAdvanceDelay)
-                guard self.currentLevel?.id == expectedLevelID else { return }
-                self.advanceLevel()
             }
         } else {
             let levelID = currentLevel?.id
@@ -307,7 +370,6 @@ final class GameState {
 
         if recipe.resultGlyph == combination.targetChar {
             combinationSolvedTarget = true
-            scheduleAdvance(delaySeconds: 1.1)
         }
     }
 
@@ -366,11 +428,37 @@ final class GameState {
 
     private func enterPlaying(at index: Int) {
         guard levels.indices.contains(index) else { return }
+        // #region agent log
+        AgentRuntimeDebugLogger.log(
+            hypothesisID: "H1",
+            location: "GameState.swift:363",
+            message: "enterPlaying accepted index",
+            data: [
+                "targetIndex": index,
+                "flowStateBefore": "\(flowState)",
+                "showLevelMenuBefore": showLevelMenu,
+            ]
+        )
+        // #endregion
         advanceTask?.cancel()
         quizTask?.cancel()
         showLevelMenu = false
         currentLevelIndex = index
         flowState = .playing
         resetForCurrentLevel()
+        // #region agent log
+        AgentRuntimeDebugLogger.log(
+            hypothesisID: "H3",
+            location: "GameState.swift:371",
+            message: "enterPlaying completed",
+            data: [
+                "flowStateAfter": "\(flowState)",
+                "currentLevelIndexAfter": currentLevelIndex,
+                "currentLevelExists": currentLevel != nil,
+                "currentLevelType": "\(String(describing: currentLevel?.type))",
+                "currentLevelID": currentLevel?.id ?? -1,
+            ]
+        )
+        // #endregion
     }
 }

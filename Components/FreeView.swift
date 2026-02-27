@@ -2,6 +2,7 @@ import Observation
 import SwiftUI
 
 struct FreeView: View {
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Bindable var gameState: GameState
     let level: WebLevel
     @State private var baseInventory: [InventoryToken] = []
@@ -17,6 +18,15 @@ struct FreeView: View {
     @State private var successFeedbackToken = 0
     @State private var directionErrorFeedbackToken = 0
     @State private var invalidErrorFeedbackToken = 0
+    @State private var finishEnabled = false
+    @ScaledMetric(relativeTo: .title2) private var instructionFontSize: CGFloat = 30
+    @ScaledMetric(relativeTo: .title3) private var discoveredGlyphSize: CGFloat = 26
+    @State private var a11yPairLayout: A11yPairLayout = .horizontal
+    @State private var a11ySwapOrder = false
+    
+    private var a11yVoiceOverModeEnabled: Bool {
+        voiceOverEnabled || gameState.a11yPreviewVoiceOverEnabled
+    }
 
     var body: some View {
         guard let free = level.free else {
@@ -28,7 +38,7 @@ struct FreeView: View {
                 ZStack {
                     VStack(spacing: 4) {
                         Text(free.displayInstruction(mode: gameState.scriptDisplayMode))
-                            .font(.system(size: 30, weight: .regular, design: .serif))
+                            .font(.system(size: instructionFontSize, weight: .regular, design: .serif))
                             .multilineTextAlignment(.center)
                         Text("Wrong direction repels; invalid combos return to inventory")
                             .font(.footnote)
@@ -44,6 +54,9 @@ struct FreeView: View {
 
                     HStack {
                         Spacer()
+                        if a11yVoiceOverModeEnabled {
+                            a11yPlacementControls
+                        }
                         ControlGroup {
                             Button {
                                 _ = itemsOnCanvas.popLast()
@@ -94,6 +107,8 @@ struct FreeView: View {
                             .buttonStyle(.borderedProminent)
                             .tint(.green)
                             .foregroundStyle(.white)
+                            .disabled(!finishEnabled)
+                            .opacity(finishEnabled ? 1 : 0.5)
                             .padding(.bottom, 14)
                         }
 
@@ -122,7 +137,14 @@ struct FreeView: View {
             .onChange(of: itemsOnCanvas) { _, _ in
                 detectAutoCombinations(free: free)
             }
-            .sensoryFeedback(.success, trigger: successFeedbackToken)
+            .onChange(of: a11yPairLayout) { _, _ in
+                guard a11yVoiceOverModeEnabled else { return }
+                guard itemsOnCanvas.allSatisfy({ $0.status == .idle }) else { return }
+                withAnimation(GameState.MotionContract.microEase) {
+                    applyA11yPlacementLayout()
+                }
+            }
+            .sensoryFeedback(.impact(weight: .medium), trigger: successFeedbackToken)
             .sensoryFeedback(.error, trigger: directionErrorFeedbackToken)
             .sensoryFeedback(.warning, trigger: invalidErrorFeedbackToken)
         )
@@ -179,7 +201,11 @@ struct FreeView: View {
             }
         }
         .accessibilityLabel("Free creation zone")
-        .accessibilityHint("Drop items to trigger automatic combinations")
+        .accessibilityHint(
+            a11yVoiceOverModeEnabled
+                ? "Add items from the inventory to trigger automatic combinations."
+                : "Drop items to trigger automatic combinations"
+        )
     }
 
     private func discoveredStrip(targetCount: Int) -> some View {
@@ -189,7 +215,7 @@ struct FreeView: View {
                 .foregroundStyle(.secondary)
             ForEach(foundRecipes, id: \.self) { glyph in
                 Text(glyph)
-                    .font(.system(size: 26, weight: .regular, design: .serif))
+                    .font(.system(size: discoveredGlyphSize, weight: .regular, design: .serif))
             }
             Spacer()
             Text("\(foundRecipes.count)")
@@ -250,17 +276,60 @@ struct FreeView: View {
         .background(.thinMaterial)
     }
 
+    private var a11yPlacementControls: some View {
+        HStack(spacing: 10) {
+            Picker("Layout", selection: $a11yPairLayout) {
+                Text("Horizontal").tag(A11yPairLayout.horizontal)
+                Text("Vertical").tag(A11yPairLayout.vertical)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 220, height: 44)
+            .accessibilityLabel("Piece layout")
+
+            Button {
+                a11ySwapOrder.toggle()
+                withAnimation(GameState.MotionContract.microEase) {
+                    applyA11yPlacementLayout()
+                }
+            } label: {
+                Label("Swap", systemImage: "arrow.left.arrow.right")
+            }
+            .buttonStyle(.bordered)
+            .frame(minWidth: 44, minHeight: 44)
+            .disabled(itemsOnCanvas.count != 2)
+            .accessibilityHint("Swap left and right, or top and bottom")
+        }
+        .padding(.trailing, 12)
+    }
+
     private func inventoryItem(_ token: InventoryToken) -> some View {
-        VStack(spacing: 6) {
+        let tile = VStack(spacing: 6) {
             PieceTile(glyph: token.displayIcon(mode: gameState.scriptDisplayMode), pressed: false)
                 .frame(width: 64, height: 64)
             Text(token.displayLabel(mode: gameState.scriptDisplayMode))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .draggable(token.id)
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Inventory \(token.displayLabel(mode: gameState.scriptDisplayMode))")
-        .accessibilityHint("Drag this item into center zone")
+        .accessibilityHint(
+            a11yVoiceOverModeEnabled
+                ? "Double tap to add this item to the creation zone"
+                : "Drag this item into center zone"
+        )
+
+        return Group {
+            if a11yVoiceOverModeEnabled {
+                Button {
+                    addTokenA11y(token)
+                } label: {
+                    tile
+                }
+                .buttonStyle(.plain)
+            } else {
+                tile.draggable(token.id)
+            }
+        }
     }
 
     private func clampedPoint(_ point: CGPoint) -> CGPoint {
@@ -268,6 +337,72 @@ struct FreeView: View {
             x: min(max(point.x, 44), 306),
             y: min(max(point.y, 44), 306)
         )
+    }
+
+    private func addTokenA11y(_ token: InventoryToken) {
+        guard a11yVoiceOverModeEnabled else { return }
+        guard evolvingRecipe == nil else { return }
+        guard itemsOnCanvas.count < 3 else {
+            feedback = "Canvas is full. Clear or undo to add more."
+            feedbackKind = nil
+            return
+        }
+        withAnimation(GameState.MotionContract.microEase) {
+            itemsOnCanvas.append(
+                CanvasItem(
+                    uniqueID: UUID().uuidString,
+                    item: token,
+                    position: CGPoint(x: 175, y: 175)
+                )
+            )
+            applyA11yPlacementLayout()
+        }
+    }
+
+    private func applyA11yPlacementLayout() {
+        let center = CGPoint(x: 175, y: 175)
+        guard !itemsOnCanvas.isEmpty else { return }
+
+        if itemsOnCanvas.count == 1 {
+            itemsOnCanvas[0].position = center
+            return
+        }
+
+        if itemsOnCanvas.count == 2 {
+            let a = CGPoint(x: center.x - 70, y: center.y)
+            let b = CGPoint(x: center.x + 70, y: center.y)
+            let c = CGPoint(x: center.x, y: center.y - 70)
+            let d = CGPoint(x: center.x, y: center.y + 70)
+
+            let first: CGPoint
+            let second: CGPoint
+            switch a11yPairLayout {
+            case .horizontal:
+                first = a
+                second = b
+            case .vertical:
+                first = c
+                second = d
+            }
+
+            if a11ySwapOrder {
+                itemsOnCanvas[0].position = second
+                itemsOnCanvas[1].position = first
+            } else {
+                itemsOnCanvas[0].position = first
+                itemsOnCanvas[1].position = second
+            }
+            return
+        }
+
+        let positions: [CGPoint] = [
+            CGPoint(x: center.x, y: center.y - 70),
+            CGPoint(x: center.x - 60, y: center.y + 40),
+            CGPoint(x: center.x + 60, y: center.y + 40),
+        ]
+        for index in 0..<min(3, itemsOnCanvas.count) {
+            itemsOnCanvas[index].position = positions[index]
+        }
     }
 
     private func detectAutoCombinations(free: FreeLevelData) {
@@ -465,9 +600,14 @@ struct FreeView: View {
         feedback = "Created \(recipe.resultMeaning)!"
         feedbackKind = nil
         successFeedbackToken += 1
+        CreationFeedback.playMergeSound(audioEnabled: gameState.audioEnabled)
 
         if foundRecipes.count >= targetCount {
             feedback = level.free?.displayFinalMessage(mode: gameState.scriptDisplayMode) ?? feedback
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(level.wowPauseSeconds))
+                finishEnabled = true
+            }
         } else {
             Task { @MainActor in
                 try? await Task.sleep(for: GameState.MotionContract.transientFeedbackClearDelay)
@@ -536,6 +676,9 @@ struct FreeView: View {
         evolvingRecipe = nil
         evolvingIngredients = []
         evolutionCenter = nil
+        finishEnabled = false
+        a11yPairLayout = .horizontal
+        a11ySwapOrder = false
     }
 
     private func statusAnimation(for status: CanvasItemStatus) -> Animation {
@@ -559,5 +702,10 @@ struct FreeView: View {
             .padding(.vertical, 10)
             .background(isDirection ? Color.orange.opacity(0.94) : Color.indigo.opacity(0.92), in: Capsule(style: .continuous))
             .contentTransition(.opacity)
+    }
+
+    private enum A11yPairLayout: Hashable {
+        case horizontal
+        case vertical
     }
 }

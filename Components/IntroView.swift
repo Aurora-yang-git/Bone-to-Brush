@@ -5,22 +5,24 @@ struct IntroView: View {
     @Bindable var gameState: GameState
     @State private var revealTrigger = 0
     @State private var startFeedbackToken = 0
+    @ScaledMetric(relativeTo: .largeTitle) private var introTitleSize: CGFloat = 72
 
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
 
             VStack(spacing: 14) {
-                Text("Oracle Script")
-                    .font(.system(size: 72, weight: .bold, design: .serif))
+                Text("Bone to Brush")
+                    .font(.system(size: introTitleSize, weight: .bold, design: .serif))
                     .foregroundStyle(Color(.label))
                     .kerning(1.2)
                     .contentTransition(.opacity)
-                Text("Follow the shapes of the world to see where writing begins.")
+                    .accessibilityAddTraits(.isHeader)
+                Text("3,000 years ago, writing began as pictures. Watch them. Draw them. Combine them. See how they became the characters used by a billion people today.")
                     .font(.title3.weight(.light))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                    .frame(maxWidth: 520)
+                    .frame(maxWidth: 680)
             }
             .padding(.horizontal, 24)
             .phaseAnimator([0, 1], trigger: revealTrigger) { content, phase in
@@ -33,6 +35,17 @@ struct IntroView: View {
 
             Button {
                 startFeedbackToken += 1
+                // #region agent log
+                AgentRuntimeDebugLogger.log(
+                    hypothesisID: "H1",
+                    location: "IntroView.swift:37",
+                    message: "Start button tapped",
+                    data: [
+                        "flowState": "\(gameState.flowState)",
+                        "currentLevelIndex": gameState.currentLevelIndex,
+                    ]
+                )
+                // #endregion
                 gameState.startJourney()
             } label: {
                 ZStack {
@@ -47,7 +60,7 @@ struct IntroView: View {
                         } animation: { _ in
                             GameState.MotionContract.introHaloRevealEase
                         }
-                    Label("Start Journey", systemImage: "arrow.right")
+                    Label("Begin 3-Minute Journey", systemImage: "arrow.right")
                         .font(.title3.weight(.semibold))
                         .padding(.horizontal, 28)
                         .padding(.vertical, 14)
@@ -70,10 +83,23 @@ struct IntroView: View {
             .accessibilityLabel("Start journey")
             .accessibilityHint("Enter the oracle script interactive flow")
             .frame(minWidth: 44, minHeight: 44)
+            .onAppear {
+                // #region agent log
+                AgentRuntimeDebugLogger.log(
+                    hypothesisID: "H14",
+                    location: "IntroView.swift:86",
+                    message: "Start button appeared",
+                    data: [
+                        "flowState": "\(gameState.flowState)",
+                        "revealTrigger": revealTrigger,
+                    ]
+                )
+                // #endregion
+            }
 
             Spacer()
 
-            Text("Oracle Script Interactive Exploration")
+            Text("A short journey from image to meaning")
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 26)
@@ -87,8 +113,69 @@ struct IntroView: View {
         }
         .padding(24)
         .sensoryFeedback(.impact(weight: .light), trigger: startFeedbackToken)
+        .onAppear {
+            // #region agent log
+            AgentRuntimeDebugLogger.log(
+                hypothesisID: "H7",
+                location: "IntroView.swift:92",
+                message: "IntroView onAppear",
+                data: [
+                    "flowState": "\(gameState.flowState)",
+                    "currentLevelIndex": gameState.currentLevelIndex,
+                ]
+            )
+            // #endregion
+        }
+        .onDisappear {
+            // #region agent log
+            AgentRuntimeDebugLogger.log(
+                hypothesisID: "H7",
+                location: "IntroView.swift:104",
+                message: "IntroView onDisappear",
+                data: [
+                    "flowState": "\(gameState.flowState)",
+                    "currentLevelIndex": gameState.currentLevelIndex,
+                ]
+            )
+            // #endregion
+        }
         .task {
+            // #region agent log
+            AgentRuntimeDebugLogger.log(
+                hypothesisID: "H7",
+                location: "IntroView.swift:111",
+                message: "Intro reveal task fired",
+                data: [
+                    "flowState": "\(gameState.flowState)",
+                    "revealTriggerBefore": revealTrigger,
+                ]
+            )
+            // #endregion
             revealTrigger += 1
+            // #region agent log
+            AgentRuntimeDebugLogger.log(
+                hypothesisID: "H14",
+                location: "IntroView.swift:152",
+                message: "Intro revealTrigger incremented",
+                data: [
+                    "revealTriggerAfter": revealTrigger,
+                    "flowState": "\(gameState.flowState)",
+                ]
+            )
+            // #endregion
+        }
+        .onChange(of: revealTrigger) { _, newValue in
+            // #region agent log
+            AgentRuntimeDebugLogger.log(
+                hypothesisID: "H14",
+                location: "IntroView.swift:163",
+                message: "revealTrigger changed",
+                data: [
+                    "newRevealTrigger": newValue,
+                    "flowState": "\(gameState.flowState)",
+                ]
+            )
+            // #endregion
         }
     }
 }

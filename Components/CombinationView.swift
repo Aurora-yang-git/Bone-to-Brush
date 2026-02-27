@@ -2,6 +2,7 @@ import Observation
 import SwiftUI
 
 struct CombinationView: View {
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Bindable var gameState: GameState
     let level: WebLevel
     @State private var inventory: [InventoryToken] = []
@@ -16,6 +17,15 @@ struct CombinationView: View {
     @State private var successFeedbackToken = 0
     @State private var directionErrorFeedbackToken = 0
     @State private var invalidErrorFeedbackToken = 0
+    @State private var continueEnabled = false
+    @ScaledMetric(relativeTo: .title2) private var instructionFontSize: CGFloat = 30
+    @ScaledMetric(relativeTo: .largeTitle) private var resultGlyphFontSize: CGFloat = 98
+    @State private var a11yPairLayout: A11yPairLayout = .horizontal
+    @State private var a11ySwapOrder = false
+    
+    private var a11yVoiceOverModeEnabled: Bool {
+        voiceOverEnabled || gameState.a11yPreviewVoiceOverEnabled
+    }
 
     var body: some View {
         guard let combination = level.combination else {
@@ -27,12 +37,23 @@ struct CombinationView: View {
                 ZStack {
                     VStack(spacing: 4) {
                         Text(combination.displayInstruction(mode: gameState.scriptDisplayMode))
-                            .font(.system(size: 30, weight: .regular, design: .serif))
+                            .font(.system(size: instructionFontSize, weight: .regular, design: .serif))
                             .foregroundStyle(.primary.opacity(0.92))
                             .multilineTextAlignment(.center)
-                        Text("Target: \(combination.targetChar) · \(combination.displayTargetMeaning(mode: gameState.scriptDisplayMode))")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                        switch combination.hintStrategy {
+                        case .explicit:
+                            Text("Target: \(combination.targetChar) · \(combination.displayTargetMeaning(mode: gameState.scriptDisplayMode))")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        case .subtle:
+                            Text("Target meaning: \(combination.displayTargetMeaning(mode: gameState.scriptDisplayMode))")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        case .none:
+                            Text("Combine and infer the result yourself")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 16)
@@ -44,6 +65,9 @@ struct CombinationView: View {
 
                     HStack(alignment: .bottom) {
                         Spacer()
+                        if a11yVoiceOverModeEnabled {
+                            a11yPlacementControls
+                        }
                         ControlGroup {
                             Button {
                                 _ = placedItems.popLast()
@@ -68,6 +92,25 @@ struct CombinationView: View {
                     }
                     .padding(.bottom, 140)
                     .frame(maxHeight: .infinity, alignment: .bottom)
+
+                    if showResultStatic, staticResultGlyph == combination.targetChar {
+                        VStack {
+                            Spacer()
+                            Button {
+                                gameState.advanceLevel()
+                            } label: {
+                                Label("Continue", systemImage: "arrow.right.circle.fill")
+                                    .font(.headline)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 11)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(!continueEnabled)
+                            .opacity(continueEnabled ? 1 : 0.5)
+                            .padding(.bottom, 88)
+                        }
+                        .transition(.opacity)
+                    }
 
                     if let feedback {
                         VStack {
@@ -101,11 +144,19 @@ struct CombinationView: View {
             }
             .onChange(of: level.id) { _, _ in
                 resetState(combination: combination)
+                continueEnabled = false
             }
             .onChange(of: placedItems) { _, _ in
                 evaluateCombinationRules(combination: combination)
             }
-            .sensoryFeedback(.success, trigger: successFeedbackToken)
+            .onChange(of: a11yPairLayout) { _, _ in
+                guard a11yVoiceOverModeEnabled else { return }
+                guard placedItems.allSatisfy({ $0.status == .idle }) else { return }
+                withAnimation(GameState.MotionContract.microEase) {
+                    applyA11yPlacementLayout()
+                }
+            }
+            .sensoryFeedback(.impact(weight: .medium), trigger: successFeedbackToken)
             .sensoryFeedback(.error, trigger: directionErrorFeedbackToken)
             .sensoryFeedback(.warning, trigger: invalidErrorFeedbackToken)
         )
@@ -127,7 +178,7 @@ struct CombinationView: View {
             if showResultStatic, !staticResultGlyph.isEmpty {
                 VStack(spacing: 8) {
                     Text(staticResultGlyph)
-                        .font(.system(size: 98, weight: .regular, design: .serif))
+                        .font(.system(size: resultGlyphFontSize, weight: .regular, design: .serif))
                     Text("Character Formed")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
@@ -176,23 +227,42 @@ struct CombinationView: View {
             }
         }
         .accessibilityLabel("Combination zone")
-        .accessibilityHint("Drop pieces here. Combination happens automatically.")
+        .accessibilityHint(
+            a11yVoiceOverModeEnabled
+                ? "Add pieces from the inventory. Combination happens automatically."
+                : "Drop pieces here. Combination happens automatically."
+        )
     }
 
     private var inventoryBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 14) {
                 ForEach(inventory) { token in
-                    VStack(spacing: 6) {
+                    let tile = VStack(spacing: 6) {
                         PieceTile(glyph: token.displayIcon(mode: gameState.scriptDisplayMode), pressed: false)
                             .frame(width: 80, height: 80)
                         Text(token.displayLabel(mode: gameState.scriptDisplayMode))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    .draggable(token.id)
+                    .accessibilityElement(children: .ignore)
                     .accessibilityLabel("Inventory \(token.displayLabel(mode: gameState.scriptDisplayMode))")
-                    .accessibilityHint("Drag this piece into center zone")
+                    .accessibilityHint(
+                        a11yVoiceOverModeEnabled
+                            ? "Double tap to add this piece to the combination zone"
+                            : "Drag this piece into center zone"
+                    )
+
+                    if a11yVoiceOverModeEnabled {
+                        Button {
+                            addTokenA11y(token)
+                        } label: {
+                            tile
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        tile.draggable(token.id)
+                    }
                 }
             }
             .padding(.horizontal, 12)
@@ -202,11 +272,103 @@ struct CombinationView: View {
         .background(.thinMaterial)
     }
 
+    private var a11yPlacementControls: some View {
+        HStack(spacing: 10) {
+            Picker("Layout", selection: $a11yPairLayout) {
+                Text("Horizontal").tag(A11yPairLayout.horizontal)
+                Text("Vertical").tag(A11yPairLayout.vertical)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 220, height: 44)
+            .accessibilityLabel("Piece layout")
+
+            Button {
+                a11ySwapOrder.toggle()
+                withAnimation(GameState.MotionContract.microEase) {
+                    applyA11yPlacementLayout()
+                }
+            } label: {
+                Label("Swap", systemImage: "arrow.left.arrow.right")
+            }
+            .buttonStyle(.bordered)
+            .frame(minWidth: 44, minHeight: 44)
+            .disabled(placedItems.count != 2)
+            .accessibilityHint("Swap left and right, or top and bottom")
+        }
+        .padding(.trailing, 12)
+    }
+
     private func clampedPoint(_ point: CGPoint) -> CGPoint {
         CGPoint(
             x: min(max(point.x, 44), 306),
             y: min(max(point.y, 44), 306)
         )
+    }
+
+    private func addTokenA11y(_ token: InventoryToken) {
+        guard a11yVoiceOverModeEnabled else { return }
+        guard evolvingRecipe == nil else { return }
+        guard placedItems.count < 3 else {
+            feedback = "Canvas is full. Clear or undo to add more."
+            feedbackKind = nil
+            return
+        }
+        withAnimation(GameState.MotionContract.microEase) {
+            placedItems.append(
+                CanvasItem(
+                    uniqueID: UUID().uuidString,
+                    item: token,
+                    position: CGPoint(x: 175, y: 175)
+                )
+            )
+            applyA11yPlacementLayout()
+        }
+    }
+
+    private func applyA11yPlacementLayout() {
+        let center = CGPoint(x: 175, y: 175)
+        guard !placedItems.isEmpty else { return }
+
+        if placedItems.count == 1 {
+            placedItems[0].position = center
+            return
+        }
+
+        if placedItems.count == 2 {
+            let a = CGPoint(x: center.x - 70, y: center.y)
+            let b = CGPoint(x: center.x + 70, y: center.y)
+            let c = CGPoint(x: center.x, y: center.y - 70)
+            let d = CGPoint(x: center.x, y: center.y + 70)
+
+            let first: CGPoint
+            let second: CGPoint
+            switch a11yPairLayout {
+            case .horizontal:
+                first = a
+                second = b
+            case .vertical:
+                first = c
+                second = d
+            }
+
+            if a11ySwapOrder {
+                placedItems[0].position = second
+                placedItems[1].position = first
+            } else {
+                placedItems[0].position = first
+                placedItems[1].position = second
+            }
+            return
+        }
+
+        let positions: [CGPoint] = [
+            CGPoint(x: center.x, y: center.y - 70),
+            CGPoint(x: center.x - 60, y: center.y + 40),
+            CGPoint(x: center.x + 60, y: center.y + 40),
+        ]
+        for index in 0..<min(3, placedItems.count) {
+            placedItems[index].position = positions[index]
+        }
     }
 
     private func evaluateCombinationRules(combination: CombinationLevelData) {
@@ -330,9 +492,13 @@ struct CombinationView: View {
             evolvingIngredients = []
         }
         successFeedbackToken += 1
+        CreationFeedback.playMergeSound(audioEnabled: gameState.audioEnabled)
 
         if recipe.resultGlyph == targetGlyph {
-            gameState.scheduleAdvance(delaySeconds: GameState.MotionContract.combinationAdvanceDelaySeconds)
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(level.wowPauseSeconds))
+                continueEnabled = true
+            }
         } else {
             Task { @MainActor in
                 try? await Task.sleep(for: GameState.MotionContract.secondaryResultHoldDelay)
@@ -402,6 +568,9 @@ struct CombinationView: View {
         evolvingIngredients = []
         showResultStatic = false
         staticResultGlyph = ""
+        continueEnabled = false
+        a11yPairLayout = .horizontal
+        a11ySwapOrder = false
     }
 
     private func statusAnimation(for status: CanvasItemStatus) -> Animation {
@@ -426,5 +595,10 @@ struct CombinationView: View {
             .background(isDirection ? Color.orange.opacity(0.95) : Color.indigo.opacity(0.92), in: Capsule(style: .continuous))
             .shadow(color: .black.opacity(0.25), radius: 10, x: 0, y: 4)
             .contentTransition(.opacity)
+    }
+
+    private enum A11yPairLayout: Hashable {
+        case horizontal
+        case vertical
     }
 }
